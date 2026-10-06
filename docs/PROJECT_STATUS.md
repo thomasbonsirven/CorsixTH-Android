@@ -1,4 +1,4 @@
-# CorsixTH Android Modernization — Project Status
+﻿# CorsixTH Android Modernization â€” Project Status
 
 Last updated: 2026-10-06
 
@@ -14,13 +14,13 @@ Base branch:
 
 ## Current phase
 
-**Phase 1 — Reproducible local build of the inherited port**
+**Phase 1 â€” Reproducible local build of the inherited port**
 
-Status: **PARTIAL — assembleDebug verified on Windows; device install not yet validated**
+Status: **PARTIAL â€” assembleDebug verified on Windows; device install not yet validated**
 
 Previous:
 
-**Phase 0 — Baseline and repository control** — documentation established; local toolchain inventory completed via the Phase 1 build attempt.
+**Phase 0 â€” Baseline and repository control** â€” documentation established; local toolchain inventory completed via the Phase 1 build attempt.
 
 ## GitHub Actions status
 
@@ -79,12 +79,12 @@ The following values were **verified by executing** a local Windows build, not o
 | Command | `.\gradlew.bat assembleDebug --stacktrace` |
 | Result | **BUILD SUCCESSFUL in 8m 43s** |
 | APK path | `build/outputs/apk/debug/CorsixTH-Android-debug.apk` |
-| APK size | **76.47 MiB** (80 179 730 bytes) |
+| APK size | **76.47 MiB** (80â€¯179â€¯730 bytes) |
 | APK package | `uk.co.armedpineapple.cth` |
 | APK versionName | `1.0.0-SNAPSHOT` |
 | ABIs in APK | `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64` |
 | Native libs observed | `libappmain.so`, `libSDL2.so`, `libSDL2_mixer.so`, `libLUA.so`, `libinnoextract.so`, Crashlytics NDK libs |
-| Device test | **Not performed** — no authorized `adb devices` attached |
+| Device test | **Not performed** â€” no authorized `adb devices` attached |
 
 ### Environment notes
 
@@ -167,9 +167,31 @@ Therefore the migration to CorsixTH 0.70.1 must begin with a delta analysis rath
 - [x] Resolve missing `google-services.json` without committing secrets.
 - [x] `assembleDebug` succeeds and produces an APK.
 - [x] Record APK path, size and ABIs.
-- [ ] Install APK on at least one ARM64 Android device via ADB.
-- [ ] Confirm application reaches setup/first screen without immediate crash.
+- [x] Install APK on at least one ARM64 Android device via ADB.
+- [x] Confirm application reaches setup/first screen without immediate crash.
 - [ ] Optional: document a one-command local env setup script (later, if useful).
+
+
+## Runtime crash fix (2026-10-06, verified on device)
+
+Device: nubia NX789J, Android 16
+
+Verified root cause via DropBox `data_app_crash`:
+
+```
+java.lang.IllegalArgumentException: Please set a valid API key.
+  at com.google.firebase.installations.FirebaseInstallations.preConditionChecks
+  at com.google.firebase.perf.transport.TransportManager...
+```
+
+Cause: community `google-services` stub + Firebase Performance.
+
+Fix verified:
+
+- Firebase Performance plugin/dependency disabled when community stub is detected
+- Play Games SDK / auto sign-in skipped for `BuildConfig.COMMUNITY_BUILD`
+- After reinstall: process stays alive on `SetupActivity` (no Theme Hospital data yet)
+- No new DropBox crash after the fixed APK install
 
 ## Immediate next task
 
@@ -189,3 +211,4 @@ Mandatory documents:
 - `docs/PROJECT_STATUS.md`
 
 Any AI/developer continuing this work must read these files before implementation.
+
