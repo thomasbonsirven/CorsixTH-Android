@@ -111,3 +111,11 @@ $env:ANDROID_SDK_ROOT = "E:\000-lastBeacon_ia\android-sdk"
 | APK size | **~43.5 MiB** (was ~76 MiB multi-ABI) |
 
 AGP note: setting `APP_ABI` alone can leave stale multi-ABI `.so` files packaged; `ndk.abiFilters` is required to enforce the milestone ABI in the APK.
+
+## Submodule git note
+
+Phase 3 edits inside `jni/CorsixTH` were committed locally on branch:
+
+`feature/android-phase3-toolchain` @ `473312fa`
+
+There is currently **no** `thomasbonsirven/CorsixTH` GitHub fork. Before pushing the parent Android repo publicly, create that fork (or another owned remote), push the submodule branch there, and update `.gitmodules` / `origin` accordingly. Until then, keep the submodule commit local.
