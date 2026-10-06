@@ -49,7 +49,12 @@ class CTHApplication : android.app.Application() {
 
     override fun onCreate() {
         super.onCreate()
-        PlayGamesSdk.initialize(this);
+        // Community/debug builds use a stub google-services.json and are not
+        // linked to the Play Console project; initializing Play Games there only
+        // shows a useless sign-in UI and can confuse first-launch validation.
+        if (!BuildConfig.COMMUNITY_BUILD) {
+            PlayGamesSdk.initialize(this)
+        }
         initConfiguration()
     }
 

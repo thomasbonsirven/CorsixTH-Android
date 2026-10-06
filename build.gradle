@@ -28,6 +28,7 @@ apply plugin: 'kotlin-kapt'
 // Otherwise the committed community stub is copied into place for this build only.
 def googleServicesJson = file('google-services.json')
 def communityGoogleServicesStub = file('distribution/community/google-services.community.json')
+def communityGoogleServicesMarker = 'corsixth-android-community-local'
 if (!googleServicesJson.exists()) {
     if (!communityGoogleServicesStub.exists()) {
         throw new GradleException(
@@ -38,10 +39,20 @@ if (!googleServicesJson.exists()) {
     logger.lifecycle("Using community google-services.json stub for local build " +
             "(no private Google/Firebase credentials).")
 }
+def usingCommunityGoogleServices =
+        googleServicesJson.exists() &&
+                googleServicesJson.text.contains(communityGoogleServicesMarker)
 
 apply plugin: 'com.google.gms.google-services'
 apply plugin: 'com.google.firebase.crashlytics'
-apply plugin: 'com.google.firebase.firebase-perf'
+// Firebase Performance crashes at runtime with an invalid community API key
+// (IllegalArgumentException in FirebaseInstallations / TransportManager).
+// Keep it only when a real google-services.json is present.
+if (!usingCommunityGoogleServices) {
+    apply plugin: 'com.google.firebase.firebase-perf'
+} else {
+    logger.lifecycle("Community google-services stub detected: Firebase Performance disabled.")
+}
 
 repositories {
     google()
@@ -76,7 +87,9 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics:19.3.0'
     implementation 'com.google.firebase:firebase-crashlytics-ndk:19.3.0'
     implementation 'com.google.firebase:firebase-analytics:22.1.2'
-    implementation 'com.google.firebase:firebase-perf:21.0.3'
+    if (!usingCommunityGoogleServices) {
+        implementation 'com.google.firebase:firebase-perf:21.0.3'
+    }
 
     implementation 'com.google.android.gms:play-services-games-v2:20.1.2'
 
@@ -103,6 +116,8 @@ android {
 
         versionName = project.ext.buildVersion
         versionCode = project.ext.offsetBuildVersionCode
+        buildConfigField "boolean", "COMMUNITY_BUILD",
+                (usingCommunityGoogleServices ? "true" : "false")
     }
 
     compileOptions {

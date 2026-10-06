@@ -48,7 +48,7 @@ class GameActivity : SDLActivity(), Loggable {
         StatisticsService((application as CTHApplication).statsDatabase)
     }
 
-    private lateinit var playGamesService: PlayGamesService
+    private var playGamesService: PlayGamesService? = null
 
     @get:Keep
     val gameEventHandler by lazy {
@@ -64,7 +64,9 @@ class GameActivity : SDLActivity(), Loggable {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         singleton = this
-        playGamesService = PlayGamesService(this, statisticsService)
+        if (!BuildConfig.COMMUNITY_BUILD) {
+            playGamesService = PlayGamesService(this, statisticsService)
+        }
 
         val filesService = FilesService(this)
 
@@ -250,13 +252,13 @@ class GameActivity : SDLActivity(), Loggable {
         @Keep
         @JvmStatic
         fun signIn() {
-            singleton.playGamesService.signIn()
+            singleton.playGamesService?.signIn()
         }
 
         @Keep
         @JvmStatic
         fun showAchievements() {
-            singleton.playGamesService.showAchievements()
+            singleton.playGamesService?.showAchievements()
         }
 
         @Keep
