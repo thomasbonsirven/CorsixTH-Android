@@ -22,6 +22,23 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: 'versioning.gradle'
 apply plugin: 'kotlin-kapt'
+
+// Local/community baseline: allow assembleDebug without a private CI secret.
+// If a real google-services.json is present (gitignored), it is used unchanged.
+// Otherwise the committed community stub is copied into place for this build only.
+def googleServicesJson = file('google-services.json')
+def communityGoogleServicesStub = file('distribution/community/google-services.community.json')
+if (!googleServicesJson.exists()) {
+    if (!communityGoogleServicesStub.exists()) {
+        throw new GradleException(
+                "google-services.json is missing and no community stub was found at " +
+                        communityGoogleServicesStub.path)
+    }
+    googleServicesJson.text = communityGoogleServicesStub.text
+    logger.lifecycle("Using community google-services.json stub for local build " +
+            "(no private Google/Firebase credentials).")
+}
+
 apply plugin: 'com.google.gms.google-services'
 apply plugin: 'com.google.firebase.crashlytics'
 apply plugin: 'com.google.firebase.firebase-perf'
@@ -77,6 +94,9 @@ configurations.configureEach {
 
 android {
     namespace 'uk.co.armedpineapple.cth'
+    // Pinned to the NDK version verified by the Windows Phase-1 baseline build.
+    // Prefer this over deprecated local.properties ndk.dir.
+    ndkVersion "27.0.12077973"
     defaultConfig {
         minSdkVersion 27
         targetSdkVersion 35
