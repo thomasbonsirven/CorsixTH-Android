@@ -118,6 +118,12 @@ android {
         versionCode = project.ext.offsetBuildVersionCode
         buildConfigField "boolean", "COMMUNITY_BUILD",
                 (usingCommunityGoogleServices ? "true" : "false")
+
+        // Phase 3: enforce the ARM64 modernization ABI at the AGP layer as well
+        // as in jni/Application.mk (prevents packaging stale multi-ABI .so files).
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
 
     compileOptions {

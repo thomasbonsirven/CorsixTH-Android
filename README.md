@@ -341,6 +341,7 @@ Start here if you want to understand or work on the modernization:
 - [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) — detailed migration phases
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — current technical status
 - [`docs/MIGRATION_MATRIX_0.70.1.md`](docs/MIGRATION_MATRIX_0.70.1.md) — Android fork vs CorsixTH 0.70.1 delta
+- [`docs/PHASE3_NATIVE_TOOLCHAIN.md`](docs/PHASE3_NATIVE_TOOLCHAIN.md) — ndk-build / C++17 / ARM64 readiness
 - [`docs/AI_AGENT_RULES.md`](docs/AI_AGENT_RULES.md) — rules for AI-assisted development
 
 ---
