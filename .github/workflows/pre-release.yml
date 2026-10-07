@@ -72,26 +72,33 @@ jobs:
           "RELEASE_TAG=v$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "BUILD_VERSION=$ver"
 
-      - name: Build release APK
+      - name: Build release APK (short path)
         shell: powershell
         run: |
-          # Uses debug keystore when RELEASE_STORE_FILE is unset/blank.
+          # Windows ndk-build hits CreateProcess error 87 when the link line is too
+          # long under GithubActions_Runner\_work\... Mirror into C:\cth-pr.
+          $short = "C:\cth-pr"
+          if (Test-Path $short) { cmd /c "rmdir `"$short`"" }
+          cmd /c "mklink /J `"$short`" `"$env:GITHUB_WORKSPACE`""
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create short junction $short" }
+          "SHORT_WORKSPACE=$short" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Set-Location $short
           .\gradlew.bat createGameZip assembleRelease --no-daemon
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
           IS_SNAPSHOT: 'false'
           BUILD_NUMBER: ${{ github.run_number }}
 
-
       - name: Stage APK artifact
         shell: powershell
         run: |
+          $root = if ($env:SHORT_WORKSPACE) { $env:SHORT_WORKSPACE } else { $env:GITHUB_WORKSPACE }
+          Set-Location $root
           New-Item -ItemType Directory -Force -Path distribution/pre-release | Out-Null
           $src = Get-ChildItem -Recurse build/outputs/apk/release/*.apk | Select-Object -First 1
           if (-not $src) { throw "No release APK found" }
           $dest = "distribution/pre-release/CorsixTH-Android-$($env:BUILD_VERSION).apk"
           Copy-Item $src.FullName $dest -Force
-          Copy-Item $src.FullName "build/outputs/apk/release/CorsixTH-Android-$($env:BUILD_VERSION).apk" -Force
           Write-Host "Staged $dest ($($src.Length) bytes)"
 
       - name: Upload APK artifact
