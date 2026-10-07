@@ -30,6 +30,36 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Resolve Android SDK (self-hosted)
+        shell: powershell
+        run: |
+          $sdk = $env:ANDROID_HOME
+          if ([string]::IsNullOrWhiteSpace($sdk)) { $sdk = $env:ANDROID_SDK_ROOT }
+          if ([string]::IsNullOrWhiteSpace($sdk)) {
+            $candidates = @(
+              "$env:LOCALAPPDATA\Android\Sdk",
+              "$env:USERPROFILE\AppData\Local\Android\Sdk",
+              "E:\000-lastBeacon_ia\android-sdk",
+              "C:\Android\Sdk",
+              "E:\Android\Sdk"
+            )
+            foreach ($c in $candidates) {
+              if ((Test-Path "$c\platform-tools") -or (Test-Path "$c\platforms")) {
+                $sdk = $c
+                break
+              }
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($sdk) -or -not (Test-Path $sdk)) {
+            throw "Android SDK not found. Set ANDROID_HOME on the GAMING runner."
+          }
+          "ANDROID_HOME=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # local.properties uses escaped backslashes (Gradle Properties format).
+          $escaped = ($sdk -replace '\\', '/')
+          "sdk.dir=$escaped" | Set-Content -Path local.properties -Encoding ascii
+          Write-Host "ANDROID_HOME=$sdk"
+
       - name: Resolve version
         shell: powershell
         run: |
