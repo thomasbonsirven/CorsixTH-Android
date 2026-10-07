@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Community flavor: strip Play Games / Firebase application metadata. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <meta-data
+            android:name="com.google.android.gms.games.APP_ID"
+            tools:node="remove" />
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            tools:node="remove" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            tools:node="remove" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            tools:node="remove" />
+        <meta-data
+            android:name="google_analytics_default_allow_ad_personalization_signals"
+            tools:node="remove" />
+        <meta-data
+            android:name="google_analytics_ssaid_collection_enabled"
+            tools:node="remove" />
+    </application>
+</manifest>

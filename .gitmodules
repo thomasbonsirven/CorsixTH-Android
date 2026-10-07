@@ -1,4 +1,4 @@
 [submodule "jni/CorsixTH"]
 	path = jni/CorsixTH
-	url = https://github.com/alanwoolley/CorsixTH.git
-	branch = Android
+	url = https://github.com/thomasbonsirven/CorsixTH-android-0.70.1.git
+	branch = feature/android-phase4-0.70.1

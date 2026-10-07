@@ -1,22 +1,20 @@
 package uk.co.armedpineapple.cth
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.net.Uri
+import android.util.Log
 import android.view.LayoutInflater
 import android.widget.Button
 import androidx.appcompat.app.AlertDialog
-import com.google.firebase.analytics.ktx.analytics
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
-
 
 /**
- * Manages analytics and diagnostics reporting.
+ * Manages analytics and diagnostics reporting consent.
  *
- * @property context A valid context.
+ * Community builds never prompt and never enable telemetry.
  */
 class Reporting(private val context: Context) {
 
@@ -26,6 +24,9 @@ class Reporting(private val context: Context) {
      * @returns true if consent granted.
      */
     fun hasRequestedConsent(): Boolean {
+        if (BuildConfig.COMMUNITY_BUILD) {
+            return true
+        }
         return context.defaultSharedPreferences.getBoolean(
             context.getString(R.string.prefs_has_requested_consent), false
         )
@@ -39,7 +40,11 @@ class Reporting(private val context: Context) {
         val i = Intent(Intent.ACTION_VIEW)
         i.data = Uri.parse(url)
         i.addFlags(FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(i)
+        try {
+            context.startActivity(i)
+        } catch (e: ActivityNotFoundException) {
+            Log.w("Reporting", "No https viewer available for privacy policy", e)
+        }
     }
 
     /**
@@ -48,6 +53,9 @@ class Reporting(private val context: Context) {
      * @param activity An activity to own the dialog.
      */
     fun requestConsent(activity: Activity) {
+        if (BuildConfig.COMMUNITY_BUILD) {
+            return
+        }
         val layout = LayoutInflater.from(context).inflate(R.layout.dialog_consent, null, false)
         layout.findViewById<Button>(R.id.privacy_policy_button).setOnClickListener {
             openPrivacyPolicy()
@@ -71,7 +79,6 @@ class Reporting(private val context: Context) {
             .putBoolean(context.getString(R.string.prefs_has_requested_consent), true)
             .putBoolean(context.getString(R.string.prefs_consent), consent).apply()
 
-        Firebase.crashlytics.setCrashlyticsCollectionEnabled(consent)
-        Firebase.analytics.setAnalyticsCollectionEnabled(consent)
+        Diagnostics.reporter.setCollectionEnabled(consent)
     }
 }

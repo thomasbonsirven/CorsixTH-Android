@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import uk.co.armedpineapple.cth.AndroidUiHardening
 import uk.co.armedpineapple.cth.CTHApplication
 import uk.co.armedpineapple.cth.GameActivity
 import uk.co.armedpineapple.cth.Loggable
@@ -31,6 +32,7 @@ class SettingsActivity : AppCompatActivity(), Loggable,
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidUiHardening.applyNonGameSystemBars(this)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
         setContentView(R.layout.settings_activity)
         setSupportActionBar(findViewById(R.id.toolbar))

@@ -2,7 +2,6 @@ package uk.co.armedpineapple.cth
 
 import androidx.preference.PreferenceManager
 import androidx.room.Room
-import com.google.android.gms.games.PlayGamesSdk
 import uk.co.armedpineapple.cth.files.FilesService
 import uk.co.armedpineapple.cth.persistence.saves.GameDatabase
 import uk.co.armedpineapple.cth.localisation.LanguageService
@@ -49,7 +48,7 @@ class CTHApplication : android.app.Application() {
 
     override fun onCreate() {
         super.onCreate()
-        PlayGamesSdk.initialize(this);
+        DistributionBootstrap.init(this)
         initConfiguration()
     }
 

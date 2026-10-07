@@ -61,18 +61,39 @@ public class HIDDeviceManager {
     private BluetoothManager mBluetoothManager;
     private List<BluetoothDevice> mLastBluetoothDevices;
 
+    @SuppressWarnings("deprecation")
+    private static <T extends android.os.Parcelable> T getParcelableExtraCompat(
+            Intent intent, String key, Class<T> clazz) {
+        if (Build.VERSION.SDK_INT >= 33 /* Android 13 (T) */) {
+            return intent.getParcelableExtra(key, clazz);
+        }
+        return intent.getParcelableExtra(key);
+    }
+
+    private void registerReceiverCompat(BroadcastReceiver receiver, IntentFilter filter) {
+        // targetSdk 34+ requires an explicit export flag for dynamic receivers.
+        if (Build.VERSION.SDK_INT >= 33 /* Android 13 (T) */) {
+            mContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            mContext.registerReceiver(receiver, filter);
+        }
+    }
+
     private final BroadcastReceiver mUsbBroadcast = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (action.equals(UsbManager.ACTION_USB_DEVICE_ATTACHED)) {
-                UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                UsbDevice usbDevice = getParcelableExtraCompat(
+                        intent, UsbManager.EXTRA_DEVICE, UsbDevice.class);
                 handleUsbDeviceAttached(usbDevice);
             } else if (action.equals(UsbManager.ACTION_USB_DEVICE_DETACHED)) {
-                UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                UsbDevice usbDevice = getParcelableExtraCompat(
+                        intent, UsbManager.EXTRA_DEVICE, UsbDevice.class);
                 handleUsbDeviceDetached(usbDevice);
             } else if (action.equals(HIDDeviceManager.ACTION_USB_PERMISSION)) {
-                UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                UsbDevice usbDevice = getParcelableExtraCompat(
+                        intent, UsbManager.EXTRA_DEVICE, UsbDevice.class);
                 handleUsbDevicePermission(usbDevice, intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false));
             }
         }
@@ -84,7 +105,8 @@ public class HIDDeviceManager {
             String action = intent.getAction();
             // Bluetooth device was connected. If it was a Steam Controller, handle it
             if (action.equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                BluetoothDevice device = getParcelableExtraCompat(
+                        intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
                 Log.d(TAG, "Bluetooth device connected: " + device);
 
                 if (isSteamController(device)) {
@@ -94,7 +116,8 @@ public class HIDDeviceManager {
 
             // Bluetooth device was disconnected, remove from controller manager (if any)
             if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                BluetoothDevice device = getParcelableExtraCompat(
+                        intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
                 Log.d(TAG, "Bluetooth device disconnected: " + device);
 
                 disconnectBluetoothDevice(device);
@@ -193,7 +216,7 @@ public class HIDDeviceManager {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         filter.addAction(HIDDeviceManager.ACTION_USB_PERMISSION);
-        mContext.registerReceiver(mUsbBroadcast, filter);
+        registerReceiverCompat(mUsbBroadcast, filter);
 
         for (UsbDevice usbDevice : mUsbManager.getDeviceList().values()) {
             handleUsbDeviceAttached(usbDevice);
@@ -404,7 +427,7 @@ public class HIDDeviceManager {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-        mContext.registerReceiver(mBluetoothBroadcast, filter);
+        registerReceiverCompat(mBluetoothBroadcast, filter);
 
         if (mIsChromebook) {
             mHandler = new Handler(Looper.getMainLooper());

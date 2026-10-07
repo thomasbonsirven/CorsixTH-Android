@@ -3,18 +3,32 @@ package uk.co.armedpineapple.cth
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
 import android.util.Log
+import android.view.KeyEvent
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputConnectionWrapper
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import android.widget.RelativeLayout
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.Keep
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.libsdl.app.CthImeBridge
 import org.libsdl.app.SDLActivity
 import org.libsdl.app.SDLSurface
 import uk.co.armedpineapple.cth.files.FilesService
@@ -48,7 +62,12 @@ class GameActivity : SDLActivity(), Loggable {
         StatisticsService((application as CTHApplication).statsDatabase)
     }
 
-    private lateinit var playGamesService: PlayGamesService
+    private var playGamesService: PlayGamesController? = null
+
+    /** Real EditText used to attach the soft keyboard (SurfaceView steals DummyEdit focus). */
+    private var imeEdit: EditText? = null
+    private var imeBridgeText: String = ""
+    private var imeWatcher: TextWatcher? = null
 
     @get:Keep
     val gameEventHandler by lazy {
@@ -64,7 +83,8 @@ class GameActivity : SDLActivity(), Loggable {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         singleton = this
-        playGamesService = PlayGamesService(this, statisticsService)
+        AndroidUiHardening.applyGameDisplayCutout(this)
+        playGamesService = DistributionBootstrap.createPlayGames(this, statisticsService)
 
         val filesService = FilesService(this)
 
@@ -81,12 +101,13 @@ class GameActivity : SDLActivity(), Loggable {
             return;
         }
 
-        // Install the latest CTH game files in the background.
+        // Install / upgrade CorsixTH engine payload from assets/game.zip when needed.
         var installJob: Job? = null
-        if ((application as CTHApplication).isFirstLaunchForVersion || !filesService.hasGameFiles(
-                configuration
-            ) || BuildConfig.ALWAYS_UPGRADE
-        ) {
+        val needsEngineInstall =
+            (application as CTHApplication).isFirstLaunchForVersion ||
+                filesService.needsEngineDataUpgrade(configuration) ||
+                BuildConfig.ALWAYS_UPGRADE
+        if (needsEngineInstall) {
             Toast.makeText(this, getString(R.string.upgrading), Toast.LENGTH_SHORT).show()
 
             val target = configuration.cthFiles
@@ -222,14 +243,217 @@ class GameActivity : SDLActivity(), Loggable {
         }
     }
 
+    /**
+     * Force the Android soft keyboard for CorsixTH textboxes.
+     * Immersive SDL surfaces normally keep focus and block the IME.
+     */
+    private fun forceShowSoftKeyboard() {
+        Log.i(TAG, "forceShowSoftKeyboard")
+        try {
+            File(filesDir, "ime_show_marker.txt").writeText(
+                "show@${System.currentTimeMillis()}\n"
+            )
+        } catch (_: Exception) {
+        }
+        // Block SDLActivity from re-asserting immersive sticky (steals IME focus).
+        CthImeBridge.setScreenKeyboardShown(true)
+        mFullscreenModeActive = false
+
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.insetsController?.show(
+                WindowInsets.Type.ime() or WindowInsets.Type.systemBars()
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+
+        mSurface?.isFocusable = false
+        mSurface?.isFocusableInTouchMode = false
+        mSurface?.clearFocus()
+
+        val edit = ensureImeEdit()
+        edit.visibility = View.VISIBLE
+        edit.isFocusable = true
+        edit.isFocusableInTouchMode = true
+        edit.requestFocus()
+
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        fun tryShow() {
+            edit.requestFocus()
+            imm.restartInput(edit)
+            val shown = imm.showSoftInput(edit, InputMethodManager.SHOW_FORCED)
+            if (!shown) {
+                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                window.insetsController?.show(WindowInsets.Type.ime())
+                edit.windowInsetsController?.show(WindowInsets.Type.ime())
+            }
+        }
+
+        edit.post { tryShow() }
+        edit.postDelayed({ tryShow() }, 100)
+        edit.postDelayed({ tryShow() }, 350)
+    }
+
+    private fun ensureImeEdit(): EditText {
+        imeEdit?.let { return it }
+
+        // Custom EditText: when empty, still forward Backspace to CorsixTH so the
+        // pre-filled name (e.g. "PLAYER") can be erased — the IME buffer alone
+        // only knows about characters typed after the keyboard opened.
+        val edit = object : EditText(this) {
+            override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+                val base = super.onCreateInputConnection(outAttrs) ?: return null
+                return object : InputConnectionWrapper(base, true) {
+                    private fun forwardBackspaces(count: Int): Boolean {
+                        if ((text?.length ?: 0) != 0 || count <= 0) {
+                            return false
+                        }
+                        repeat(count) { CthImeBridge.backspace() }
+                        return true
+                    }
+
+                    override fun deleteSurroundingText(
+                        beforeLength: Int,
+                        afterLength: Int
+                    ): Boolean {
+                        if (forwardBackspaces(beforeLength)) {
+                            return true
+                        }
+                        return super.deleteSurroundingText(beforeLength, afterLength)
+                    }
+
+                    override fun deleteSurroundingTextInCodePoints(
+                        beforeLength: Int,
+                        afterLength: Int
+                    ): Boolean {
+                        if (forwardBackspaces(beforeLength)) {
+                            return true
+                        }
+                        return super.deleteSurroundingTextInCodePoints(beforeLength, afterLength)
+                    }
+
+                    override fun sendKeyEvent(event: KeyEvent): Boolean {
+                        if (event.action == KeyEvent.ACTION_DOWN &&
+                            event.keyCode == KeyEvent.KEYCODE_DEL &&
+                            forwardBackspaces(1)
+                        ) {
+                            return true
+                        }
+                        return super.sendKeyEvent(event)
+                    }
+                }
+            }
+        }.apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            setTextColor(Color.TRANSPARENT)
+            setHintTextColor(Color.TRANSPARENT)
+            alpha = 0.01f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or
+                EditorInfo.IME_FLAG_NO_FULLSCREEN or
+                EditorInfo.IME_ACTION_DONE
+            isSingleLine = true
+            // Keep a non-zero hit target so the IME can attach on modern Android.
+            minimumHeight = (48 * resources.displayMetrics.density).toInt()
+        }
+
+        val params = RelativeLayout.LayoutParams(
+            RelativeLayout.LayoutParams.MATCH_PARENT,
+            (48 * resources.displayMetrics.density).toInt()
+        )
+        params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val text = s?.toString() ?: ""
+                syncImeTextToSdl(text)
+            }
+        }
+        imeWatcher = watcher
+        edit.addTextChangedListener(watcher)
+        edit.setOnEditorActionListener { _, _, _ ->
+            forceHideSoftKeyboard()
+            true
+        }
+
+        mLayout.addView(edit, params)
+        imeEdit = edit
+        imeBridgeText = ""
+        return edit
+    }
+
+    private fun syncImeTextToSdl(text: String) {
+        val previous = imeBridgeText
+        var match = 0
+        val max = minOf(previous.length, text.length)
+        while (match < max && previous[match] == text[match]) {
+            match++
+        }
+        for (i in match until previous.length) {
+            CthImeBridge.backspace()
+        }
+        if (match < text.length) {
+            CthImeBridge.commitText(text.substring(match))
+        }
+        imeBridgeText = text
+    }
+
+    private fun forceHideSoftKeyboard() {
+        Log.i(TAG, "forceHideSoftKeyboard")
+        CthImeBridge.setScreenKeyboardShown(false)
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.insetsController?.hide(WindowInsets.Type.ime())
+        }
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        val edit = imeEdit
+        if (edit != null) {
+            imm.hideSoftInputFromWindow(edit.windowToken, 0)
+            edit.clearFocus()
+            edit.visibility = View.GONE
+            imeWatcher?.let { edit.removeTextChangedListener(it) }
+            edit.setText("")
+            imeWatcher?.let { edit.addTextChangedListener(it) }
+            imeBridgeText = ""
+        } else {
+            val token = currentFocus?.windowToken ?: window.decorView.windowToken
+            if (token != null) {
+                imm.hideSoftInputFromWindow(token, 0)
+            }
+        }
+
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        mFullscreenModeActive = true
+
+        mSurface?.isFocusable = true
+        mSurface?.isFocusableInTouchMode = true
+        mSurface?.requestFocus()
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
     companion object {
+        private const val TAG = "GameActivity"
+
         @JvmStatic
         lateinit var singleton: GameActivity
 
         @Keep
         @JvmStatic
         fun showSettings() {
-            Log.i("GameActivity", "Showing settings")
+            Log.i(TAG, "Showing settings")
 
             val intent = Intent(singleton, SettingsActivity::class.java)
             singleton.startActivity(intent);
@@ -249,14 +473,50 @@ class GameActivity : SDLActivity(), Loggable {
 
         @Keep
         @JvmStatic
+        fun showSoftKeyboard() {
+            try {
+                val activity = singleton
+                activity.runOnUiThread {
+                    try {
+                        activity.forceShowSoftKeyboard()
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "forceShowSoftKeyboard failed", t)
+                        Toast.makeText(activity, "IME error: ${t.message}", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "showSoftKeyboard failed", t)
+            }
+        }
+
+        @Keep
+        @JvmStatic
+        fun hideSoftKeyboard() {
+            try {
+                val activity = singleton
+                activity.runOnUiThread {
+                    try {
+                        activity.forceHideSoftKeyboard()
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "forceHideSoftKeyboard failed", t)
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "hideSoftKeyboard failed", t)
+            }
+        }
+
+        @Keep
+        @JvmStatic
         fun signIn() {
-            singleton.playGamesService.signIn()
+            singleton.playGamesService?.signIn()
         }
 
         @Keep
         @JvmStatic
         fun showAchievements() {
-            singleton.playGamesService.showAchievements()
+            singleton.playGamesService?.showAchievements()
         }
 
         @Keep
@@ -276,7 +536,7 @@ class GameActivity : SDLActivity(), Loggable {
         @Keep
         @JvmStatic
         fun onGameError(handler: ByteArray?, stack: ByteArray?) {
-            Firebase.crashlytics.recordException(
+            Diagnostics.reporter.recordException(
                 if (handler != null) {
                     NativeLuaHandlerException(handler, stack)
                 } else {

@@ -1270,6 +1270,20 @@ public class SDLActivity extends ComponentActivity implements View.OnSystemUiVis
 
         @Override
         public void run() {
+            // Immersive sticky fullscreen prevents the IME from focusing DummyEdit.
+            // Temporarily leave immersive UI so the soft keyboard can appear.
+            if (SDLActivity.mSingleton != null) {
+                Window window = SDLActivity.mSingleton.getWindow();
+                if (window != null) {
+                    window.setSoftInputMode(
+                            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+                                    | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+                    if (Build.VERSION.SDK_INT >= 19) {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                    }
+                }
+            }
+
             RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(w, h + HEIGHT_PADDING);
             params.leftMargin = x;
             params.topMargin = y;
@@ -1283,10 +1297,16 @@ public class SDLActivity extends ComponentActivity implements View.OnSystemUiVis
             }
 
             mTextEdit.setVisibility(View.VISIBLE);
+            mTextEdit.setFocusable(true);
+            mTextEdit.setFocusableInTouchMode(true);
             mTextEdit.requestFocus();
 
             InputMethodManager imm = (InputMethodManager) SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.showSoftInput(mTextEdit, 0);
+            imm.restartInput(mTextEdit);
+            boolean shown = imm.showSoftInput(mTextEdit, InputMethodManager.SHOW_FORCED);
+            if (!shown) {
+                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+            }
 
             mScreenKeyboardShown = true;
         }
@@ -1296,6 +1316,15 @@ public class SDLActivity extends ComponentActivity implements View.OnSystemUiVis
      * This method is called by SDL using JNI.
      */
     public static boolean showTextInput(int x, int y, int w, int h) {
+        // CorsixTH: DummyEdit rarely wins focus against the GL SurfaceView on
+        // modern Android. Prefer GameActivity's EditText IME bridge when present.
+        try {
+            Class<?> gameActivity = Class.forName("uk.co.armedpineapple.cth.GameActivity");
+            gameActivity.getMethod("showSoftKeyboard").invoke(null);
+            return true;
+        } catch (Throwable ignored) {
+            // Fall back to stock SDL DummyEdit path.
+        }
         // Transfer the task to the main thread as a Runnable
         return mSingleton.commandHandler.post(new ShowTextInputTask(x, y, w, h));
     }
@@ -1636,6 +1665,11 @@ public class SDLActivity extends ComponentActivity implements View.OnSystemUiVis
     };
 
     public void onSystemUiVisibilityChange(int visibility) {
+        // Do not re-assert immersive mode while the soft keyboard is up —
+        // rehiding system UI steals focus from DummyEdit and dismisses the IME.
+        if (mScreenKeyboardShown) {
+            return;
+        }
         if (SDLActivity.mFullscreenModeActive && ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0 || (visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)) {
 
             Handler handler = getWindow().getDecorView().getHandler();

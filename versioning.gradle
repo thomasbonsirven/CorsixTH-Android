@@ -2,5 +2,7 @@ ext {
     buildVersionCode = Integer.parseInt(System.getenv("BUILD_NUMBER") ?: "999999")
     offsetBuildVersionCode = 100000000 + buildVersionCode
     isSnapshot = Boolean.parseBoolean(System.getenv("IS_SNAPSHOT") ?: "false") || (System.getenv("BUILD_NUMBER") == null)
-    buildVersion = "1.0.0" + (isSnapshot ? "-SNAPSHOT" : ("." + buildVersionCode.toString()))
+    // BUILD_VERSION overrides the default scheme (e.g. 0.70.1-pre-release).
+    buildVersion = System.getenv("BUILD_VERSION")
+            ?: ("1.0.0" + (isSnapshot ? "-SNAPSHOT" : ("." + buildVersionCode.toString())))
 }

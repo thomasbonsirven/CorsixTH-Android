@@ -91,7 +91,7 @@ prevent_edge_scrolling_original = {{prevent_edge_scrolling}}
 -------------------------------------------------------------------------------
 -- Capture mouse: By default enabled (capture mouse = true).
 --
-capture_mouse = true
+capture_mouse = false
 
 -------------------------------------------------------------------------------
 -- Adviser on/off: If you set this to true the adviser will no longer

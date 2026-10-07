@@ -8,6 +8,7 @@ import android.view.Window
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.setFragmentResultListener
+import uk.co.armedpineapple.cth.AndroidUiHardening
 import uk.co.armedpineapple.cth.R
 
 
@@ -17,6 +18,7 @@ import uk.co.armedpineapple.cth.R
 class SaveActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidUiHardening.applyNonGameSystemBars(this)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
         setContentView(R.layout.save_activity)
         setSupportActionBar(findViewById(R.id.toolbar))

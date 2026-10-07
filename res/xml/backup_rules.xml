@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 8: Auto Backup (API <= 30). Engine / Theme Hospital live under
+  noBackupFilesDir and are excluded automatically. Only user saves/screenshots
+  under filesDir are eligible for backup.
+-->
+<full-backup-content>
+    <include domain="file" path="saves/" />
+    <include domain="file" path="screenshots/" />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>

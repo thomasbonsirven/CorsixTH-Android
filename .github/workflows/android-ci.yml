@@ -9,28 +9,18 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    # Runner GAMING labels: self-hosted, Windows, X64
+    runs-on: [self-hosted, Windows, X64]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
-    - name: set up JDK 18
-      uses: actions/setup-java@v3
+    - name: set up JDK 17
+      uses: actions/setup-java@v5
       with:
-        java-version: '18'
+        java-version: '17'
         distribution: 'temurin'
-        cache: gradle
-    - name: Decode Google Services Info
-      uses: timheuer/base64-to-file@v1.2
-      with:
-        fileName: 'google-services.json'
-        fileDir: '.'
-        encodedString: ${{ secrets.GOOGLE_SERVICES_JSON }}
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build App bundle
-      run: ./gradlew bundleRelease
-    - name: Build APKS
-      run: ./gradlew assembleRelease
+    - name: Build debug APK (community-safe)
+      shell: powershell
+      run: .\gradlew.bat createGameZip assembleCommunityDebug --no-daemon

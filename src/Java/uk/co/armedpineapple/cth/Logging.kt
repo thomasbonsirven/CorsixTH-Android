@@ -1,8 +1,6 @@
 package uk.co.armedpineapple.cth
 
 import android.util.Log
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
 
 open class Logger(tag: String) : Loggable {
     override val loggerTag: String = tag
@@ -106,11 +104,11 @@ private inline fun log(
         val logMessage = message?.toString() ?: "null"
         if (throwable != null) {
             throwableLogFunction(tag, logMessage, throwable)
-            Firebase.crashlytics.log(logMessage)
-            Firebase.crashlytics.recordException(throwable)
+            Diagnostics.reporter.log(logMessage)
+            Diagnostics.reporter.recordException(throwable)
         } else {
             logFunction(tag, logMessage)
-            Firebase.crashlytics.log(logMessage)
+            Diagnostics.reporter.log(logMessage)
         }
     }
 }
