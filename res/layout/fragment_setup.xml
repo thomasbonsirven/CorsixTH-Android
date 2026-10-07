@@ -19,6 +19,7 @@
         android:id="@+id/setup"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="@android:color/transparent"
         android:padding="20dp"
         tools:background="@drawable/setup_bg"
         tools:context=".setup.SetupFragment">
@@ -39,14 +40,18 @@
 
         <ImageView
             android:id="@+id/imageView"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:maxWidth="600dp"
-            android:src="@drawable/cth"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/app_name"
+            android:maxHeight="120dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/wizard_logo"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="600dp" />
 
         <TextView
             android:id="@+id/message"

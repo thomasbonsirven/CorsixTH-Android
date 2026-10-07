@@ -42,6 +42,7 @@ class SetupActivity : AppCompatActivity() {
         viewModel = ViewModelProvider(this)[SetupViewModel::class.java]
 
         if (savedInstanceState == null) {
+            // Fragment goes into @id/container; background ImageView stays as sibling.
             supportFragmentManager.beginTransaction()
                 .replace(R.id.container, SetupFragment.newInstance()).commitNow()
 

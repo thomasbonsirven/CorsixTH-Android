@@ -2,15 +2,22 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".setup.SetupActivity" >
+    tools:context=".setup.SetupActivity">
 
+    <!-- Kept outside the fragment container so replace() does not remove it. -->
     <ImageView
         android:id="@+id/background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:contentDescription="@null"
         android:scaleType="centerCrop"
+        android:adjustViewBounds="false"
         app:srcCompat="@drawable/setup_bg" />
+
+    <FrameLayout
+        android:id="@+id/container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 </FrameLayout>
