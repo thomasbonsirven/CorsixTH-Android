@@ -76,13 +76,18 @@ jobs:
         shell: powershell
         run: |
           # Windows ndk-build hits CreateProcess error 87 when the link line is too
-          # long under GithubActions_Runner\_work\... Mirror into C:\cth-pr.
+          # long under GithubActions_Runner\_work\... Copy into a short real path.
           $short = "C:\cth-pr"
-          if (Test-Path $short) { cmd /c "rmdir `"$short`"" }
-          cmd /c "mklink /J `"$short`" `"$env:GITHUB_WORKSPACE`""
-          if ($LASTEXITCODE -ne 0) { throw "Failed to create short junction $short" }
+          if (Test-Path $short) { Remove-Item -Recurse -Force $short }
+          New-Item -ItemType Directory -Path $short | Out-Null
+          robocopy "$env:GITHUB_WORKSPACE" $short /E /NFL /NDL /NJH /NJS /nc /ns /np
+          # robocopy exit codes 0-7 are success/partial
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
           "SHORT_WORKSPACE=$short" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Set-Location $short
+          # Refresh local.properties for the copied tree
+          $sdk = $env:ANDROID_HOME
+          "sdk.dir=$($sdk -replace '\\','/')" | Set-Content -Path local.properties -Encoding ascii
           .\gradlew.bat createGameZip assembleRelease --no-daemon
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
