@@ -70,7 +70,13 @@ jobs:
           $ver = "${{ github.event.inputs.build_version }}"
           if ([string]::IsNullOrWhiteSpace($ver)) {
             $tag = "${{ github.ref_name }}"
-            if ($tag.StartsWith("v")) { $ver = $tag.Substring(1) } else { $ver = $tag }
+            if ($tag.StartsWith("v")) {
+              $ver = $tag.Substring(1)
+            } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              $ver = "0.70.1-pre-release-2"
+            } else {
+              $ver = $tag
+            }
           }
           $runNumber = [int]"${{ github.run_number }}"
           $buildNumber = 1000000 + $runNumber
@@ -131,12 +137,11 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.BUILD_VERSION }}
           prerelease: true
-          make_latest: false
           generate_release_notes: false
           body_path: distribution/pre-release/0.70.1-pre-release.md
           files: |
             distribution/pre-release/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/pre-release/0.70.1-pre-release.md
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
