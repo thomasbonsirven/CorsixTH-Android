@@ -23,4 +23,4 @@ jobs:
         distribution: 'temurin'
     - name: Build debug APK (community-safe)
       shell: powershell
-      run: .\gradlew.bat createGameZip assembleDebug --no-daemon
+      run: .\gradlew.bat createGameZip assembleCommunityDebug --no-daemon

@@ -1,19 +1,16 @@
 package uk.co.armedpineapple.cth
 
 import android.app.Activity
-import android.content.Intent
 import com.google.android.gms.games.AuthenticationResult
 import com.google.android.gms.games.PlayGames
 import com.google.android.gms.games.Player
-import com.google.android.gms.games.provider.PlayGamesInitProvider
-import com.google.android.gms.tasks.OnSuccessListener
 import com.google.android.gms.tasks.Task
 import uk.co.armedpineapple.cth.stats.StatisticsService
 
 
 class PlayGamesService(
     private val activity: Activity, statisticsService: StatisticsService
-) : Loggable {
+) : PlayGamesController, Loggable {
 
     private var achievementsClient = PlayGames.getAchievementsClient(activity)
     private var achievementsTracker: AchievementsTracker =

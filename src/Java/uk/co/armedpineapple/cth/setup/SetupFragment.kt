@@ -35,9 +35,12 @@ class SetupFragment : Fragment() {
                 uri?.let {
                     // Persist read access so Theme Hospital import survives process death.
                     try {
-                        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        requireContext().contentResolver.takePersistableUriPermission(it, flags)
-                    } catch (e: SecurityException) {
+                        // OpenDocumentTree offers a persistable read grant; take it so
+                        // Theme Hospital import survives process death.
+                        requireContext().contentResolver.takePersistableUriPermission(
+                            it, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: SecurityException) {
                         // Temporary grant still allows the immediate copy.
                     }
                     viewModel.onGameSourceTreeGranted(it)

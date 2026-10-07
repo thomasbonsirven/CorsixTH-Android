@@ -12,3 +12,7 @@ APP_ABI := arm64-v8a
 
 # CorsixTH 0.70.x requires C++17. Also set on the engine module; keep both.
 APP_CPPFLAGS := -std=c++17 -fexceptions
+
+# Phase 8: build native shared libraries compatible with 16 KB page-size devices
+# (Android 15+). Final LOAD segments are aligned via the NDK flexible-page support.
+APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true

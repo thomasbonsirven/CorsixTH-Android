@@ -23,8 +23,6 @@ import android.widget.RelativeLayout
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.Keep
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,7 +62,7 @@ class GameActivity : SDLActivity(), Loggable {
         StatisticsService((application as CTHApplication).statsDatabase)
     }
 
-    private var playGamesService: PlayGamesService? = null
+    private var playGamesService: PlayGamesController? = null
 
     /** Real EditText used to attach the soft keyboard (SurfaceView steals DummyEdit focus). */
     private var imeEdit: EditText? = null
@@ -85,9 +83,8 @@ class GameActivity : SDLActivity(), Loggable {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         singleton = this
-        if (!BuildConfig.COMMUNITY_BUILD) {
-            playGamesService = PlayGamesService(this, statisticsService)
-        }
+        AndroidUiHardening.applyGameDisplayCutout(this)
+        playGamesService = DistributionBootstrap.createPlayGames(this, statisticsService)
 
         val filesService = FilesService(this)
 
@@ -539,7 +536,7 @@ class GameActivity : SDLActivity(), Loggable {
         @Keep
         @JvmStatic
         fun onGameError(handler: ByteArray?, stack: ByteArray?) {
-            Firebase.crashlytics.recordException(
+            Diagnostics.reporter.recordException(
                 if (handler != null) {
                     NativeLuaHandlerException(handler, stack)
                 } else {

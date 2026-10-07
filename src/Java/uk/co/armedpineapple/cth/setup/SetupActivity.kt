@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
+import uk.co.armedpineapple.cth.AndroidUiHardening
 import uk.co.armedpineapple.cth.CTHApplication
 import uk.co.armedpineapple.cth.R
 import uk.co.armedpineapple.innoextract.service.ExtractService
@@ -35,6 +36,7 @@ class SetupActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidUiHardening.applyNonGameSystemBars(this)
         setContentView(R.layout.activity_setup)
 
         viewModel = ViewModelProvider(this)[SetupViewModel::class.java]

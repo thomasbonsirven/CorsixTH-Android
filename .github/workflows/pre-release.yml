@@ -91,7 +91,7 @@ jobs:
           # Refresh local.properties for the copied tree
           $sdk = $env:ANDROID_HOME
           "sdk.dir=$($sdk -replace '\\','/')" | Set-Content -Path local.properties -Encoding ascii
-          .\gradlew.bat createGameZip assembleRelease --no-daemon
+          .\gradlew.bat createGameZip assembleCommunityRelease --no-daemon
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
           IS_SNAPSHOT: 'false'
@@ -103,7 +103,10 @@ jobs:
           $root = if ($env:SHORT_WORKSPACE) { $env:SHORT_WORKSPACE } else { $env:GITHUB_WORKSPACE }
           Set-Location $root
           New-Item -ItemType Directory -Force -Path distribution/pre-release | Out-Null
-          $src = Get-ChildItem -Recurse build/outputs/apk/release/*.apk | Select-Object -First 1
+          $src = Get-ChildItem -Recurse build/outputs/apk/community/release/*.apk | Select-Object -First 1
+          if (-not $src) {
+            $src = Get-ChildItem -Recurse build/outputs/apk/**/release/*.apk | Select-Object -First 1
+          }
           if (-not $src) { throw "No release APK found" }
           $dest = "distribution/pre-release/CorsixTH-Android-$($env:BUILD_VERSION).apk"
           Copy-Item $src.FullName $dest -Force

@@ -9,14 +9,35 @@
         android:smallScreens="false"
         android:xlargeScreens="true" />
 
+    <!-- Explicit network permissions (demo download / optional reporting). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- No broad READ/WRITE_EXTERNAL_STORAGE — Theme Hospital import uses SAF. -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+
+    <!-- Package visibility (Android 11+): privacy policy / external https viewers. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
 
     <application
         android:name="uk.co.armedpineapple.cth.CTHApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
+        android:pageSizeCompat="enabled"
         android:theme="@style/Theme.AppTheme"
-        tools:targetApi="r">
+        tools:targetApi="36">
 
         <meta-data android:name="com.google.android.gms.games.APP_ID"
             android:value="@string/app_id"/>
@@ -64,7 +85,7 @@
             android:preferMinimalPostProcessing="true"
             android:theme="@style/Theme.AppCompat.NoActionBar"
             android:windowSoftInputMode="adjustResize"
-            tools:targetApi="r">
+            tools:targetApi="36">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -74,18 +95,21 @@
         <activity
             android:name="uk.co.armedpineapple.cth.setup.SetupActivity"
             android:excludeFromRecents="true"
-            android:exported="false" />
+            android:exported="false"
+            android:enableOnBackInvokedCallback="true" />
 
         <activity
             android:name="uk.co.armedpineapple.cth.settings.SettingsActivity"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:enableOnBackInvokedCallback="true"
             android:label="@string/title_activity_settings"
             android:theme="@style/Theme.SettingsTheme" />
 
         <activity
             android:name="uk.co.armedpineapple.cth.files.SaveActivity"
             android:exported="false"
+            android:enableOnBackInvokedCallback="true"
             android:label="@string/save"
             android:theme="@style/Theme.SaveTheme" />
 

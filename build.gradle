@@ -23,35 +23,27 @@ apply plugin: 'kotlin-android'
 apply from: 'versioning.gradle'
 apply plugin: 'kotlin-kapt'
 
-// Local/community baseline: allow assembleDebug without a private CI secret.
-// If a real google-services.json is present (gitignored), it is used unchanged.
-// Otherwise the committed community stub is copied into place for this build only.
-def googleServicesJson = file('google-services.json')
-def communityGoogleServicesStub = file('distribution/community/google-services.community.json')
+// Phase 9: Google/Firebase plugins only when building the playstore flavor
+// (or when a real non-stub google-services.json is present for IDE sync).
 def communityGoogleServicesMarker = 'corsixth-android-community-local'
-if (!googleServicesJson.exists()) {
-    if (!communityGoogleServicesStub.exists()) {
-        throw new GradleException(
-                "google-services.json is missing and no community stub was found at " +
-                        communityGoogleServicesStub.path)
-    }
-    googleServicesJson.text = communityGoogleServicesStub.text
-    logger.lifecycle("Using community google-services.json stub for local build " +
-            "(no private Google/Firebase credentials).")
-}
-def usingCommunityGoogleServices =
-        googleServicesJson.exists() &&
-                googleServicesJson.text.contains(communityGoogleServicesMarker)
+def googleServicesJson = file('google-services.json')
+def taskNamesLower = gradle.startParameter.taskNames.collect { it.toLowerCase() }
+def buildingPlaystore = taskNamesLower.any { it.contains('playstore') }
+def hasRealGoogleServices = googleServicesJson.exists() &&
+        !googleServicesJson.text.contains(communityGoogleServicesMarker)
+def enablePlaystoreGooglePlugins = buildingPlaystore || hasRealGoogleServices
 
-apply plugin: 'com.google.gms.google-services'
-apply plugin: 'com.google.firebase.crashlytics'
-// Firebase Performance crashes at runtime with an invalid community API key
-// (IllegalArgumentException in FirebaseInstallations / TransportManager).
-// Keep it only when a real google-services.json is present.
-if (!usingCommunityGoogleServices) {
+if (enablePlaystoreGooglePlugins) {
+    if (!googleServicesJson.exists()) {
+        throw new GradleException(
+                "Play Store build requires google-services.json (gitignored private file).")
+    }
+    apply plugin: 'com.google.gms.google-services'
+    apply plugin: 'com.google.firebase.crashlytics'
     apply plugin: 'com.google.firebase.firebase-perf'
+    logger.lifecycle("Play Store Google/Firebase plugins enabled.")
 } else {
-    logger.lifecycle("Community google-services stub detected: Firebase Performance disabled.")
+    logger.lifecycle("Community configuration: Google Services / Crashlytics / Perf plugins skipped.")
 }
 
 repositories {
@@ -84,15 +76,6 @@ dependencies {
 
     implementation 'com.github.bumptech.glide:glide:4.16.0'
 
-    implementation 'com.google.firebase:firebase-crashlytics:19.3.0'
-    implementation 'com.google.firebase:firebase-crashlytics-ndk:19.3.0'
-    implementation 'com.google.firebase:firebase-analytics:22.1.2'
-    if (!usingCommunityGoogleServices) {
-        implementation 'com.google.firebase:firebase-perf:21.0.3'
-    }
-
-    implementation 'com.google.android.gms:play-services-games-v2:20.1.2'
-
     def room_version = "2.6.1"
     implementation "androidx.room:room-runtime:$room_version"
     annotationProcessor "androidx.room:room-compiler:$room_version"
@@ -112,17 +95,29 @@ android {
     ndkVersion "27.0.12077973"
     defaultConfig {
         minSdkVersion 27
-        targetSdkVersion 35
+        // Phase 8: target Android 16 behavior (edge-to-edge, 16 KB pages, etc.).
+        targetSdkVersion 36
 
         versionName = project.ext.buildVersion
         versionCode = project.ext.offsetBuildVersionCode
-        buildConfigField "boolean", "COMMUNITY_BUILD",
-                (usingCommunityGoogleServices ? "true" : "false")
 
         // Phase 3: enforce the ARM64 modernization ABI at the AGP layer as well
         // as in jni/Application.mk (prevents packaging stale multi-ABI .so files).
         ndk {
             abiFilters "arm64-v8a"
+        }
+    }
+
+    flavorDimensions = ["distribution"]
+    productFlavors {
+        community {
+            dimension "distribution"
+            isDefault true
+            buildConfigField "boolean", "COMMUNITY_BUILD", "true"
+        }
+        playstore {
+            dimension "distribution"
+            buildConfigField "boolean", "COMMUNITY_BUILD", "false"
         }
     }
 
@@ -156,8 +151,10 @@ android {
             } else {
                 signingConfig signingConfigs.debug
             }
-            firebaseCrashlytics {
-                nativeSymbolUploadEnabled true
+            if (enablePlaystoreGooglePlugins) {
+                firebaseCrashlytics {
+                    nativeSymbolUploadEnabled true
+                }
             }
         }
 
@@ -205,9 +202,28 @@ android {
         abortOnError false
         checkReleaseBuilds false
     }
-    compileSdk 35
+    compileSdk 36
 }
 
+// Phase 9: cloud / Play Store-only dependencies (after productFlavors exist).
+dependencies {
+    playstoreImplementation 'com.google.firebase:firebase-crashlytics:19.3.0'
+    playstoreImplementation 'com.google.firebase:firebase-crashlytics-ndk:19.3.0'
+    playstoreImplementation 'com.google.firebase:firebase-analytics:22.1.2'
+    playstoreImplementation 'com.google.firebase:firebase-perf:21.0.3'
+    playstoreImplementation 'com.google.android.gms:play-services-games-v2:20.1.2'
+}
+
+// Disable playstore variants unless Google plugins/credentials are available so
+// `assembleDebug` does not accidentally require a private google-services.json.
+androidComponents {
+    beforeVariants(selector().all()) { variantBuilder ->
+        if (variantBuilder.name.toLowerCase().startsWith("playstore") &&
+                !enablePlaystoreGooglePlugins) {
+            variantBuilder.enable = false
+        }
+    }
+}
 
 tasks.register('saveVersion') {
     new File(projectDir, "version.txt").text = project.ext.buildVersion

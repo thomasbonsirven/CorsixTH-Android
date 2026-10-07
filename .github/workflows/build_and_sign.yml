@@ -40,7 +40,7 @@ jobs:
         "IS_SNAPSHOT=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
     - name: Build APK and app bundle
       shell: powershell
-      run: .\gradlew.bat bundleRelease assembleRelease --no-daemon
+      run: .\gradlew.bat bundlePlaystoreRelease assemblePlaystoreRelease --no-daemon
       env:
         RELEASE_STORE_FILE: ${{ steps.decode_keystore.outputs.filePath }}
         RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
@@ -49,17 +49,17 @@ jobs:
         BUILD_NUMBER: ${{ github.run_number }}
     - name: Upload crashlytics symbols
       shell: powershell
-      run: .\gradlew.bat uploadCrashlyticsSymbolFileRelease --no-daemon
+      run: .\gradlew.bat uploadCrashlyticsSymbolFilePlaystoreRelease --no-daemon
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: AppBundle
-        path: build/outputs/bundle/release/*
+        path: build/outputs/bundle/playstoreRelease/*
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: APK
-        path: build/outputs/apk/release/*
+        path: build/outputs/apk/playstore/release/*
     - name: Set version variables
       shell: powershell
       run: |
