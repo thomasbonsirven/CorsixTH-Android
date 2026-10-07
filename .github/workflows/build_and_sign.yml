@@ -16,7 +16,7 @@ jobs:
       with:
         submodules: 'true'
     - name: set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: '17'
         distribution: 'temurin'
@@ -35,11 +35,11 @@ jobs:
         encodedString: ${{ secrets.GOOGLE_SERVICES_JSON }}
     - name: Set snapshot
       if: github.ref == 'refs/heads/dev'
-      shell: pwsh
+      shell: powershell
       run: |
         "IS_SNAPSHOT=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
     - name: Build APK and app bundle
-      shell: pwsh
+      shell: powershell
       run: .\gradlew.bat bundleRelease assembleRelease --no-daemon
       env:
         RELEASE_STORE_FILE: ${{ steps.decode_keystore.outputs.filePath }}
@@ -48,7 +48,7 @@ jobs:
         RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         BUILD_NUMBER: ${{ github.run_number }}
     - name: Upload crashlytics symbols
-      shell: pwsh
+      shell: powershell
       run: .\gradlew.bat uploadCrashlyticsSymbolFileRelease --no-daemon
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
@@ -61,7 +61,7 @@ jobs:
         name: APK
         path: build/outputs/apk/release/*
     - name: Set version variables
-      shell: pwsh
+      shell: powershell
       run: |
         $ver = (Get-Content version.txt -Raw).Trim()
         "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

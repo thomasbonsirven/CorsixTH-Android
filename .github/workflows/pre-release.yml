@@ -25,13 +25,13 @@ jobs:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Resolve version
-        shell: pwsh
+        shell: powershell
         run: |
           $ver = "${{ github.event.inputs.build_version }}"
           if ([string]::IsNullOrWhiteSpace($ver)) {
@@ -43,7 +43,7 @@ jobs:
           Write-Host "BUILD_VERSION=$ver"
 
       - name: Build release APK
-        shell: pwsh
+        shell: powershell
         run: |
           # Community/local signing: omit RELEASE_STORE_* to use debug keystore.
           # Set KEYSTORE + RELEASE_* secrets on the repo for a real release signature.
@@ -58,7 +58,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Stage APK artifact
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path distribution/pre-release | Out-Null
           $src = Get-ChildItem -Recurse build/outputs/apk/release/*.apk | Select-Object -First 1
