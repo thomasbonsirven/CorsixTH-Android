@@ -1,9 +1,11 @@
-# Manual community APK validation on the self-hosted GAMING runner.
-# Intentionally workflow_dispatch-only: the personal runner must never execute
-# automatically from a push or pull request without explicit authorization.
+# One-shot approved preview build on the self-hosted GAMING runner.
+# This CI-only branch exists solely to start the explicitly authorized build.
 name: Android CI
 
 on:
+  push:
+    branches:
+      - 'ci/run-keyboard-portrait-preview-20261007'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,6 @@ permissions:
 
 jobs:
   build:
-    # Labels on runner GAMING: self-hosted, Windows, X64
     runs-on: [self-hosted, Windows, X64]
 
     steps:
@@ -67,7 +68,6 @@ jobs:
       - name: Build community release APK (short path)
         shell: powershell
         run: |
-          # ndk-build CreateProcess error 87 under long GithubActions_Runner paths.
           $short = "C:\cth-ci"
           if (Test-Path $short) { Remove-Item -Recurse -Force $short }
           New-Item -ItemType Directory -Path $short | Out-Null
@@ -117,16 +117,16 @@ jobs:
           prerelease: true
           generate_release_notes: false
           body: |
-            Early Android modernization test build from `fix/keyboard-portrait-ui-modernization`.
+            Preview de test issue de `fix/keyboard-portrait-ui-modernization` (copie CI du commit 1886bdfa77ab79a8b24833da44f98ce0ccb34a2b).
 
-            Changes started in this preview:
-            - Android keyboard/IME input path simplified to avoid duplicate character events and the one-character lockup.
-            - Portrait rendering work started: logical game height is capped on very tall displays so menus and controls are not excessively small.
-            - Main-menu background handling in portrait is adjusted to preserve the full image instead of aggressively cropping it.
-            - The CorsixTH 0.70.1 core remains pinned; Android-specific Lua adjustments are staged during `game.zip` creation.
-            - Self-hosted `GAMING` runner execution remains explicitly controlled and is never enabled for pull requests.
+            Changements commencés dans cette version :
+            - Correction du chemin de saisie clavier Android/IME afin d'éviter les événements caractères en double et le blocage après le premier caractère.
+            - Première adaptation du mode portrait : limitation de la hauteur logique sur les écrans très allongés pour agrandir menus et contrôles.
+            - Adaptation du fond du menu principal en portrait afin de conserver l'image complète au lieu d'un recadrage agressif.
+            - Le coeur CorsixTH 0.70.1 reste figé ; les ajustements Lua spécifiques Android sont appliqués lors de la génération de `game.zip`.
+            - Build ARM64 community de test sur le runner self-hosted `GAMING`.
 
-            Status: early test build. Keyboard behavior, portrait menus, rotation and in-game HUD still need device validation.
+            A valider sur appareil : saisie complète, accents/backspace, menus portrait, rotation portrait/paysage et HUD en jeu.
           files: |
             distribution/ci-artifact/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/ci-artifact/CorsixTH-Android-community-latest.apk
