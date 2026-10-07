@@ -1,12 +1,9 @@
 # Manual community APK validation on the self-hosted GAMING runner.
-# Push trigger is intentionally scoped to the current test branch so an explicitly
-# authorized test commit can start the runner without exposing it to PR code.
+# Intentionally workflow_dispatch-only: the personal runner must never execute
+# automatically from a push or pull request without explicit authorization.
 name: Android CI
 
 on:
-  push:
-    branches:
-      - 'fix/keyboard-portrait-ui-modernization'
   workflow_dispatch:
 
 permissions:
