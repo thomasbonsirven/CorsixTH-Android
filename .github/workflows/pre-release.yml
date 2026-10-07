@@ -12,6 +12,9 @@ on:
         required: true
         default: '0.70.1-pre-release'
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     # Labels on runner GAMING: self-hosted, Windows, X64
@@ -114,16 +117,18 @@ jobs:
             distribution/pre-release/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/pre-release/0.70.1-pre-release.md
 
-      - name: Create GitHub pre-release
+      - name: Publish / update GitHub pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.BUILD_VERSION }}
           prerelease: true
+          make_latest: false
           generate_release_notes: false
           body_path: distribution/pre-release/0.70.1-pre-release.md
           files: |
             distribution/pre-release/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/pre-release/0.70.1-pre-release.md
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
