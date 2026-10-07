@@ -1,19 +1,12 @@
-# Community APK on the modernization branch (self-hosted GAMING).
+# Manual community APK validation on the self-hosted GAMING runner.
+# Deliberately manual-only: never execute untrusted PR code on the owner's PC.
 name: Android CI
 
 on:
-  push:
-    branches:
-      - 'feature/corsixth-0.70-modernization'
-      - 'dev'
-  pull_request:
-    branches:
-      - 'feature/corsixth-0.70-modernization'
-      - 'dev'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -102,9 +95,7 @@ jobs:
           $destName = "CorsixTH-Android-$($env:BUILD_VERSION).apk"
           $dest = Join-Path $outDir $destName
           Copy-Item $src.FullName $dest -Force
-          # Keep a stable name for rolling release downloads.
           Copy-Item $src.FullName (Join-Path $outDir "CorsixTH-Android-community-latest.apk") -Force
-          "APK_PATH=distribution/ci-artifact/$destName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Staged $($src.Length) bytes -> $dest"
 
       - name: Upload APK artifact
@@ -115,30 +106,3 @@ jobs:
             distribution/ci-artifact/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/ci-artifact/CorsixTH-Android-community-latest.apk
           if-no-files-found: error
-
-      - name: Publish rolling community pre-release
-        if: >
-          github.event_name == 'push' &&
-          (github.ref == 'refs/heads/feature/corsixth-0.70-modernization' ||
-           github.ref == 'refs/heads/dev')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: community-latest
-          name: Community latest (modernization)
-          prerelease: true
-          generate_release_notes: false
-          body: |
-            Automatic community APK from `${{ github.ref_name }}` (self-hosted GAMING).
-
-            Primary branch: `feature/corsixth-0.70-modernization`
-
-            **Version:** ${{ env.BUILD_VERSION }}
-            **Not fully tested** — early tester build.
-
-            Download `CorsixTH-Android-community-latest.apk`.
-          files: |
-            distribution/ci-artifact/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
-            distribution/ci-artifact/CorsixTH-Android-community-latest.apk
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

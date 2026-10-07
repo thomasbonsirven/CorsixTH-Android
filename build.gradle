@@ -231,12 +231,11 @@ tasks.register('saveVersion') {
 
 preBuild.dependsOn(saveVersion)
 
-// Create ZIP of CorsixTH game assets (engine/Lua only — never Theme Hospital proprietary data)
-tasks.register('createGameZip', Zip) {
-
-    destinationDirectory = file('assets')
-    archiveFileName = 'game.zip'
-
+// Stage the upstream 0.70.1 game data before packaging. Android-only Lua
+// adaptations are applied to the staged copy so the CorsixTH core submodule can
+// remain pinned and untouched (important: its repository runs CI on every push).
+def stagedGameDir = layout.buildDirectory.dir('generated/corsixth-game')
+tasks.register('stageGameAssets', Sync) {
     from('jni/CorsixTH/CorsixTH') {
         include 'Levels/**'
         include 'Campaigns/**'
@@ -244,13 +243,76 @@ tasks.register('createGameZip', Zip) {
         include 'CorsixTH.lua'
         include 'Bitmap/**'
         include 'Graphics/**'
-
-        // Bitmap build helpers are not needed at runtime on device.
         exclude 'Bitmap/mk*.lua'
         exclude 'Bitmap/lib_*.lua'
         exclude 'Bitmap/readme.txt'
         exclude 'Bitmap/example.spec'
     }
+    into(stagedGameDir)
+
+    doLast {
+        def uiFile = stagedGameDir.get().file('Lua/ui.lua').asFile
+        if (!uiFile.exists()) {
+            throw new GradleException("CorsixTH Lua/ui.lua not found in staged game assets")
+        }
+
+        def source = uiFile.getText('UTF-8')
+
+        // On a tall phone the historical Android formula can turn 640x480 into
+        // ~640x1400 logical pixels. That makes the UI feel tiny and forces the
+        // 4:3 menu background to be cropped to a narrow vertical slice. Cap the
+        // portrait logical height at 2x the configured height; landscape keeps
+        // the upstream behaviour unchanged.
+        def resizeOld = '''      else
+        newWidth = configWidth
+        newHeight = (configWidth/width) * height
+      end
+
+      newHeight = math.floor(newHeight)'''
+        def resizeNew = '''      else
+        newWidth = configWidth
+        newHeight = (configWidth/width) * height
+        if height > width then
+          newHeight = math.min(newHeight, configHeight * 2)
+        end
+      end
+
+      newHeight = math.floor(newHeight)'''
+        if (!source.contains(resizeOld)) {
+            throw new GradleException("Android portrait resize patch no longer matches CorsixTH ui.lua")
+        }
+        source = source.replace(resizeOld, resizeNew)
+
+        // Preserve the full 4:3 menu background in portrait rather than using
+        // cover-scaling, which crops most of it on 20:9 displays. Empty space is
+        // deliberately black; landscape retains the classic cover behaviour.
+        def backgroundOld = '''    local screen_w, screen_h = app.config.width, app.config.height
+    local factor = math.max(screen_w / bg_w, screen_h / bg_h)
+    if canvas:scale(factor, "bitmap") or canvas:scale(factor) then'''
+        def backgroundNew = '''    local screen_w, screen_h = app.config.width, app.config.height
+    local is_portrait = screen_h > screen_w
+    local factor = is_portrait
+      and math.min(screen_w / bg_w, screen_h / bg_h)
+      or math.max(screen_w / bg_w, screen_h / bg_h)
+    if is_portrait then
+      canvas:fillBlack()
+    end
+    if canvas:scale(factor, "bitmap") or canvas:scale(factor) then'''
+        if (!source.contains(backgroundOld)) {
+            throw new GradleException("Android portrait background patch no longer matches CorsixTH ui.lua")
+        }
+        source = source.replace(backgroundOld, backgroundNew)
+
+        uiFile.write(source, 'UTF-8')
+    }
+}
+
+// Create ZIP of CorsixTH game assets (engine/Lua only — never Theme Hospital proprietary data).
+tasks.register('createGameZip', Zip) {
+    dependsOn 'stageGameAssets'
+    destinationDirectory = file('assets')
+    archiveFileName = 'game.zip'
+    from(stagedGameDir)
 }
 
 ksp {
