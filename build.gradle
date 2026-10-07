@@ -256,7 +256,9 @@ tasks.register('stageGameAssets', Sync) {
             throw new GradleException("CorsixTH Lua/ui.lua not found in staged game assets")
         }
 
-        def source = uiFile.getText('UTF-8')
+        // Git may materialize the submodule with CRLF on the Windows runner.
+        // Normalize the staged copy so Android patch guards are deterministic.
+        def source = uiFile.getText('UTF-8').replace('\r\n', '\n')
 
         // On a tall phone the historical Android formula can turn 640x480 into
         // ~640x1400 logical pixels. That makes the UI feel tiny and forces the
