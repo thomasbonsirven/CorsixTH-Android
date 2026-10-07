@@ -33,6 +33,13 @@ class SetupFragment : Fragment() {
         documentTreeResultHandler =
             registerForActivityResult(openDocumentTreeContract) { uri: Uri? ->
                 uri?.let {
+                    // Persist read access so Theme Hospital import survives process death.
+                    try {
+                        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        requireContext().contentResolver.takePersistableUriPermission(it, flags)
+                    } catch (e: SecurityException) {
+                        // Temporary grant still allows the immediate copy.
+                    }
                     viewModel.onGameSourceTreeGranted(it)
                     Toast.makeText(requireActivity(), "Copying. Please wait.", Toast.LENGTH_SHORT)
                         .show()

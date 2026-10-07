@@ -172,6 +172,13 @@ android {
         }
     }
 
+    // SDL dlopen(nativeLibraryDir/libappmain.so) needs extracted .so files.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     applicationVariants.configureEach { variant ->
         tasks["merge${variant.name.capitalize()}Assets"]
                 .dependsOn(createGameZip)
@@ -205,7 +212,7 @@ tasks.register('saveVersion') {
 
 preBuild.dependsOn(saveVersion)
 
-// Create ZIP of CorsixTH game assets
+// Create ZIP of CorsixTH game assets (engine/Lua only — never Theme Hospital proprietary data)
 tasks.register('createGameZip', Zip) {
 
     destinationDirectory = file('assets')
@@ -217,8 +224,13 @@ tasks.register('createGameZip', Zip) {
         include 'Lua/**'
         include 'CorsixTH.lua'
         include 'Bitmap/**'
-        include 'Campaigns/**'
         include 'Graphics/**'
+
+        // Bitmap build helpers are not needed at runtime on device.
+        exclude 'Bitmap/mk*.lua'
+        exclude 'Bitmap/lib_*.lua'
+        exclude 'Bitmap/readme.txt'
+        exclude 'Bitmap/example.spec'
     }
 }
 

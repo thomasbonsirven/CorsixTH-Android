@@ -19,9 +19,11 @@ import java.io.OutputStream
 import java.util.zip.ZipFile
 
 /**
- * Files service
+ * Files service for CorsixTH engine assets and Theme Hospital proprietary data.
  *
- * @constructor Create empty Files service
+ * Engine data (`game.zip`) and Theme Hospital data are kept separate:
+ * - engine → [GameConfiguration.cthFiles]
+ * - Theme Hospital → [GameConfiguration.thFiles]
  */
 class FilesService(val ctx: Context) : Loggable {
 
@@ -51,19 +53,33 @@ class FilesService(val ctx: Context) : Loggable {
     }
 
     /**
-     * Checks whether the game files exist in the location given in the config.
+     * Checks whether a usable CorsixTH engine payload is installed.
      *
-     * @param config The configuration
-     * @return whether the game files are installed
+     * Marker files cover both 0.70.1 essentials and Android-specific Lua/UI assets.
      */
     fun hasGameFiles(config: GameConfiguration): Boolean {
-        // There's little  point searching for all the files here. If one is missing, then they
-        // probably are all missing. We could do something like checking the integrity with a
-        // checksum, but it doesn't seem worth the extra overhead.
-        //
-        // The game script is the important one to get us up and running anyway. We can detect
-        // in-game whether any of the additional files are missing or corrupt.
-        return config.cthLaunchScript.exists()
+        return ENGINE_MARKER_FILES.all { relative ->
+            File(config.cthFiles, relative).isFile
+        }
+    }
+
+    /**
+     * Whether the installed engine payload should be replaced from `game.zip`.
+     *
+     * Uses marker presence plus [EXPECTED_ENGINE_API_VERSION] from `Lua/api_version.lua`.
+     */
+    fun needsEngineDataUpgrade(config: GameConfiguration): Boolean {
+        if (!hasGameFiles(config)) {
+            return true
+        }
+        val installedApi = readInstalledApiVersion(config) ?: return true
+        if (installedApi != EXPECTED_ENGINE_API_VERSION) {
+            warn {
+                "Engine API $installedApi != expected $EXPECTED_ENGINE_API_VERSION; upgrade required"
+            }
+            return true
+        }
+        return false
     }
 
     /**
@@ -72,7 +88,7 @@ class FilesService(val ctx: Context) : Loggable {
      * @param config The configuration
      * @return Whether the demo game files are installed.
      */
-    fun isDemoVersion(config: GameConfiguration) : Boolean {
+    fun isDemoVersion(config: GameConfiguration): Boolean {
         return File(config.thFiles, "DATAM/DEMO.DAT").exists()
     }
 
@@ -85,21 +101,38 @@ class FilesService(val ctx: Context) : Loggable {
      * @return whether the original TH files are installed
      */
     fun hasOriginalFiles(config: GameConfiguration): Boolean {
-        // We should be a bit more thorough with checking for the original files, as we have less
-        // opportunity to detect if there's an issue here.
-        val expectedFiles = arrayOf(
-            "QDATA/AREA01V.DAT",
-            "DATA/LANG-0.DAT",
-        )
+        return hasThemeHospitalLayout(config.thFiles)
+    }
 
-        for (expectedFile in expectedFiles) {
-            if (!File(config.thFiles, expectedFile).exists()) {
-                warn { "Wanted TH file $expectedFile but was not found" }
-                return false
+    /**
+     * True when [root] looks like a Theme Hospital install (full or demo).
+     */
+    fun hasThemeHospitalLayout(root: File): Boolean {
+        return TH_MARKER_FILES.all { relative -> File(root, relative).isFile }
+    }
+
+    /**
+     * True when a SAF document tree looks like Theme Hospital data.
+     */
+    fun hasThemeHospitalLayout(root: DocumentFileCompat): Boolean {
+        return TH_MARKER_FILES.all { relative -> documentHasRelativeFile(root, relative) }
+    }
+
+    /**
+     * Resolves the Theme Hospital root inside a SAF tree.
+     *
+     * Accepts the selected folder itself, or a single nesting level used by some GOG/folder layouts.
+     */
+    fun resolveThemeHospitalDocumentRoot(root: DocumentFileCompat): DocumentFileCompat? {
+        if (hasThemeHospitalLayout(root)) {
+            return root
+        }
+        root.listFiles().forEach { child ->
+            if (child.isDirectory() && hasThemeHospitalLayout(child)) {
+                return child
             }
         }
-
-        return true
+        return null
     }
 
     /**
@@ -110,7 +143,7 @@ class FilesService(val ctx: Context) : Loggable {
      * @param config The configuration
      * @return whether the music library is installed
      */
-    fun hasMusicLibrary(config: GameConfiguration) : Boolean {
+    fun hasMusicLibrary(config: GameConfiguration): Boolean {
         return File(config.musicLib, "timidity.cfg").exists()
     }
 
@@ -118,7 +151,6 @@ class FilesService(val ctx: Context) : Loggable {
      * Installs the CorsixTH game files.
      *
      * @param config The configuration that determines the installation location.
-     * @param ctx The context.
      * @param progress An optional channel to send progress updates to.
      */
     suspend fun installGameFiles(
@@ -130,6 +162,7 @@ class FilesService(val ctx: Context) : Loggable {
         try {
             val target = config.cthFiles
             extractZipFile(assetOut, target, progress)
+            writeEngineStamp(config)
         } finally {
             assetOut.delete()
         }
@@ -139,7 +172,6 @@ class FilesService(val ctx: Context) : Loggable {
      * Installs the music library.
      *
      * @param config The configuration that determines the installation location.
-     * @param ctx The context.
      * @param progress An optional channel to send progress updates to.
      */
     suspend fun installMusicLibrary(
@@ -169,7 +201,7 @@ class FilesService(val ctx: Context) : Loggable {
     /**
      * Installs the original game files.
      *
-     * @param source The source document tree
+     * @param source The source document tree (already resolved to Theme Hospital root)
      * @param config The configuration that determines the installation location.
      * @param progress An optional channel to send progress updates to.
      */
@@ -180,6 +212,42 @@ class FilesService(val ctx: Context) : Loggable {
     ) {
         nukeOriginalFiles(config)
         copyDirectoryTree(source, config.thFiles, progress)
+    }
+
+    /**
+     * After a zip extract into [GameConfiguration.thFiles], promote a nested Theme Hospital
+     * root (common with demo zips) so markers sit directly under `themehospital/`.
+     *
+     * @return true if Theme Hospital markers are present after normalization
+     */
+    fun normalizeThemeHospitalInstall(config: GameConfiguration): Boolean {
+        if (hasOriginalFiles(config)) {
+            return true
+        }
+
+        val root = config.thFiles
+        if (!root.isDirectory) {
+            return false
+        }
+
+        val nested = root.listFiles()
+            ?.firstOrNull { it.isDirectory && hasThemeHospitalLayout(it) }
+            ?: return false
+
+        val staging = File(root.parentFile, "${root.name}.staging")
+        if (staging.exists()) {
+            staging.deleteRecursively()
+        }
+        if (!nested.renameTo(staging)) {
+            return false
+        }
+        root.deleteRecursively()
+        if (!staging.renameTo(root)) {
+            // Best-effort restore if rename fails mid-flight.
+            staging.renameTo(nested)
+            return false
+        }
+        return hasOriginalFiles(config)
     }
 
     /**
@@ -195,6 +263,43 @@ class FilesService(val ctx: Context) : Loggable {
         } else {
             File(config.saveFiles, saveName)
         }
+    }
+
+    private fun readInstalledApiVersion(config: GameConfiguration): Int? {
+        val apiFile = File(config.cthFiles, "Lua/api_version.lua")
+        if (!apiFile.isFile) {
+            return null
+        }
+        val text = runCatching { apiFile.readText() }.getOrNull() ?: return null
+        val match = Regex("""return\s+(\d+)\s*;""").find(text) ?: return null
+        return match.groupValues[1].toIntOrNull()
+    }
+
+    private fun writeEngineStamp(config: GameConfiguration) {
+        val stamp = File(config.cthFiles, ENGINE_STAMP_FILE)
+        stamp.parentFile?.mkdirs()
+        stamp.writeText(
+            "api=$EXPECTED_ENGINE_API_VERSION\n" +
+                "package=0.70.1\n"
+        )
+    }
+
+    private fun documentHasRelativeFile(root: DocumentFileCompat, relativePath: String): Boolean {
+        var current: DocumentFileCompat = root
+        val parts = relativePath.split('/')
+        for ((index, part) in parts.withIndex()) {
+            val next = current.listFiles().firstOrNull {
+                it.name.equals(part, ignoreCase = true)
+            } ?: return false
+            if (index == parts.lastIndex) {
+                return !next.isDirectory()
+            }
+            if (!next.isDirectory()) {
+                return false
+            }
+            current = next
+        }
+        return false
     }
 
     private suspend fun copyDirectoryTree(
@@ -368,6 +473,27 @@ class FilesService(val ctx: Context) : Loggable {
     companion object {
         private const val ENGINE_ZIP_FILE = "game.zip"
         private const val MUSIC_ZIP_FILE = "timidity.zip"
+        private const val ENGINE_STAMP_FILE = ".cth_engine_stamp"
+
+        /** Must match `CorsixTH/Lua/api_version.lua` for the packaged 0.70.1 tree. */
+        const val EXPECTED_ENGINE_API_VERSION = 2717
+
+        private val ENGINE_MARKER_FILES = arrayOf(
+            "CorsixTH.lua",
+            "Lua/app.lua",
+            "Lua/api_version.lua",
+            "Lua/earthquake.lua",
+            "Lua/endconditions.lua",
+            "Lua/dialogs/android_menu_button.lua",
+            "Lua/dialogs/resizables/android_menu.lua",
+            "Bitmap/android.dat",
+        )
+
+        private val TH_MARKER_FILES = arrayOf(
+            "QDATA/AREA01V.DAT",
+            "DATA/LANG-0.DAT",
+        )
+
         const val SAVE_GAME_EXTENSION = "sav"
         const val SAVE_GAME_FILE_SUFFIX = ".$SAVE_GAME_EXTENSION"
     }

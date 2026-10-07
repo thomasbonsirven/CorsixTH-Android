@@ -16,7 +16,6 @@
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.AppTheme"
-        android:gwpAsanMode="always"
         tools:targetApi="r">
 
         <meta-data android:name="com.google.android.gms.games.APP_ID"
@@ -32,6 +31,11 @@
         <meta-data
             android:name="SDL_ENV.SDL_TOUCH_MOUSE_EVENTS"
             android:value="false" />
+
+        <!-- Trap Android back into SDL as AC Back (mapped to Escape in Lua) instead of finishing. -->
+        <meta-data
+            android:name="SDL_ENV.SDL_ANDROID_TRAP_BACK_BUTTON"
+            android:value="true" />
 
         <!-- Don't enable crashlytics or analytics collection by default. Opt-in is used instead. -->
         <meta-data
@@ -56,10 +60,10 @@
             android:name="uk.co.armedpineapple.cth.GameActivity"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
-            android:immersive="true"
             android:launchMode="singleInstance"
             android:preferMinimalPostProcessing="true"
             android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
             tools:targetApi="r">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

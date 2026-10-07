@@ -42,22 +42,29 @@ class SetupViewModel(application: Application) : AndroidViewModel(application), 
 
         mutableIsExtracting.value = true
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 val documentRoot = DocumentFileCompat.fromTreeUri(application, uri)
-                documentRoot?.let {
-                    val progressChannel =
-                        Channel<FilesService.EstimatedFileOperationProgress>(Channel.CONFLATED) { progress ->
-                            val adjusted = (progress.progress * 100).toInt()
-                            mutableExtractProgress.postValue(adjusted)
-                        }
-                    filesService.installOriginalFiles(
-                        documentRoot, application.configuration, progressChannel
-                    )
+                    ?: return@withContext ExtractResult.FAILURE
+                val thRoot = filesService.resolveThemeHospitalDocumentRoot(documentRoot)
+                    ?: return@withContext ExtractResult.FAILURE
+
+                val progressChannel =
+                    Channel<FilesService.EstimatedFileOperationProgress>(Channel.CONFLATED) { progress ->
+                        val adjusted = (progress.progress * 100).toInt()
+                        mutableExtractProgress.postValue(adjusted)
+                    }
+                filesService.installOriginalFiles(
+                    thRoot, application.configuration, progressChannel
+                )
+                if (filesService.hasOriginalFiles(application.configuration)) {
+                    ExtractResult.SUCCESS
+                } else {
+                    ExtractResult.FAILURE
                 }
             }
             mutableIsExtracting.value = false
             mutableExtractProgress.value = 100
-            mutableExtractResult.value = ExtractResult.SUCCESS
+            mutableExtractResult.value = result
         }
     }
 
@@ -107,9 +114,13 @@ class SetupViewModel(application: Application) : AndroidViewModel(application), 
                             mutableExtractProgress.postValue(adjusted)
                         }
 
-                    filesService.nukeOriginalFiles(getApplication<CTHApplication>().configuration)
+                    val configuration = getApplication<CTHApplication>().configuration
+                    filesService.nukeOriginalFiles(configuration)
                     filesService.extractZipFile(downloadTmp, thLocation, extractProgress)
-                    mutableExtractResult.postValue(ExtractResult.SUCCESS)
+                    val ok = filesService.normalizeThemeHospitalInstall(configuration)
+                    mutableExtractResult.postValue(
+                        if (ok) ExtractResult.SUCCESS else ExtractResult.FAILURE
+                    )
                 } catch (e: Exception) {
                     Log.e("CorsixTH", "Failed to download and install", e)
                     mutableExtractResult.postValue(ExtractResult.FAILURE)
@@ -135,8 +146,12 @@ class SetupViewModel(application: Application) : AndroidViewModel(application), 
             }
 
             override fun onSuccess() {
+                val ok = filesService.normalizeThemeHospitalInstall(application.configuration) &&
+                    filesService.hasOriginalFiles(application.configuration)
                 mutableIsExtracting.postValue(false)
-                mutableExtractResult.postValue(ExtractResult.SUCCESS)
+                mutableExtractResult.postValue(
+                    if (ok) ExtractResult.SUCCESS else ExtractResult.FAILURE
+                )
             }
 
         }
