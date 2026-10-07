@@ -1,26 +1,136 @@
+# Community APK on every push to dev (self-hosted GAMING).
 name: Android CI
 
 on:
   push:
-    branches: 
+    branches:
       - 'dev'
   pull_request:
-    branches: [ "dev" ]
+    branches: ['dev']
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    # Runner GAMING labels: self-hosted, Windows, X64
+    # Labels on runner GAMING: self-hosted, Windows, X64
     runs-on: [self-hosted, Windows, X64]
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: 'true'
-    - name: set up JDK 17
-      uses: actions/setup-java@v5
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-    - name: Build debug APK (community-safe)
-      shell: powershell
-      run: .\gradlew.bat createGameZip assembleCommunityDebug --no-daemon
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Resolve Android SDK (self-hosted)
+        shell: powershell
+        run: |
+          $sdk = $env:ANDROID_HOME
+          if ([string]::IsNullOrWhiteSpace($sdk)) { $sdk = $env:ANDROID_SDK_ROOT }
+          if ([string]::IsNullOrWhiteSpace($sdk)) {
+            $candidates = @(
+              "$env:LOCALAPPDATA\Android\Sdk",
+              "$env:USERPROFILE\AppData\Local\Android\Sdk",
+              "E:\000-lastBeacon_ia\android-sdk",
+              "C:\Android\Sdk",
+              "E:\Android\Sdk"
+            )
+            foreach ($c in $candidates) {
+              if ((Test-Path "$c\platform-tools") -or (Test-Path "$c\platforms")) {
+                $sdk = $c
+                break
+              }
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($sdk) -or -not (Test-Path $sdk)) {
+            throw "Android SDK not found. Set ANDROID_HOME on the GAMING runner."
+          }
+          "ANDROID_HOME=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $escaped = ($sdk -replace '\\', '/')
+          "sdk.dir=$escaped" | Set-Content -Path local.properties -Encoding ascii
+          Write-Host "ANDROID_HOME=$sdk"
+
+      - name: Resolve version
+        shell: powershell
+        run: |
+          $runNumber = [int]"${{ github.run_number }}"
+          $buildNumber = 1000000 + $runNumber
+          $ver = "0.70.1-dev.$runNumber"
+          "BUILD_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "BUILD_NUMBER=$buildNumber" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "BUILD_VERSION=$ver BUILD_NUMBER=$buildNumber"
+
+      - name: Build community release APK (short path)
+        shell: powershell
+        run: |
+          # ndk-build CreateProcess error 87 under long GithubActions_Runner paths.
+          $short = "C:\cth-ci"
+          if (Test-Path $short) { Remove-Item -Recurse -Force $short }
+          New-Item -ItemType Directory -Path $short | Out-Null
+          robocopy "$env:GITHUB_WORKSPACE" $short /E /NFL /NDL /NJH /NJS /nc /ns /np
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
+          "SHORT_WORKSPACE=$short" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Set-Location $short
+          $sdk = $env:ANDROID_HOME
+          "sdk.dir=$($sdk -replace '\\','/')" | Set-Content -Path local.properties -Encoding ascii
+          .\gradlew.bat createGameZip assembleCommunityRelease --no-daemon
+        env:
+          BUILD_VERSION: ${{ env.BUILD_VERSION }}
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
+          IS_SNAPSHOT: 'false'
+
+      - name: Stage APK into GitHub workspace
+        shell: powershell
+        run: |
+          $short = $env:SHORT_WORKSPACE
+          if ([string]::IsNullOrWhiteSpace($short)) { $short = $env:GITHUB_WORKSPACE }
+          $src = Get-ChildItem -Recurse "$short\build\outputs\apk\community\release\*.apk" |
+            Select-Object -First 1
+          if (-not $src) { throw "No community release APK under $short" }
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "distribution\ci-artifact"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $destName = "CorsixTH-Android-$($env:BUILD_VERSION).apk"
+          $dest = Join-Path $outDir $destName
+          Copy-Item $src.FullName $dest -Force
+          # Keep a stable name for rolling release downloads.
+          Copy-Item $src.FullName (Join-Path $outDir "CorsixTH-Android-community-latest.apk") -Force
+          "APK_PATH=distribution/ci-artifact/$destName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Staged $($src.Length) bytes -> $dest"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CorsixTH-Android-${{ env.BUILD_VERSION }}
+          path: |
+            distribution/ci-artifact/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
+            distribution/ci-artifact/CorsixTH-Android-community-latest.apk
+          if-no-files-found: error
+
+      - name: Publish rolling community pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: community-latest
+          name: Community latest (dev)
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Automatic community APK from `dev` (self-hosted GAMING).
+
+            **Version:** ${{ env.BUILD_VERSION }}
+            **Not fully tested** — early tester build.
+
+            Download `CorsixTH-Android-community-latest.apk`.
+          files: |
+            distribution/ci-artifact/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
+            distribution/ci-artifact/CorsixTH-Android-community-latest.apk
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,89 +1,129 @@
+# Play Store signed build — manual only (requires KEYSTORE / google-services secrets).
+# Do not run automatically on community `dev` pushes.
 name: Build Signed Release
 
 on:
-  push:
-    branches: 
-      - 'master'
-      - 'dev'
+  workflow_dispatch:
 
 jobs:
   build:
-    # Runner GAMING labels: self-hosted, Windows, X64
+    # Labels on runner GAMING: self-hosted, Windows, X64
     runs-on: [self-hosted, Windows, X64]
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: 'true'
-    - name: set up JDK 17
-      uses: actions/setup-java@v5
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Decode Keystore
-      id: decode_keystore
-      uses: timheuer/base64-to-file@v1.2
-      with:
-        fileName: 'android_keystore.jks'
-        encodedString: ${{ secrets.KEYSTORE }}
-    - name: Decode Google Services Info
-      uses: timheuer/base64-to-file@v1.2
-      with:
-        fileName: 'google-services.json'
-        fileDir: '.'
-        encodedString: ${{ secrets.GOOGLE_SERVICES_JSON }}
-    - name: Set snapshot
-      if: github.ref == 'refs/heads/dev'
-      shell: powershell
-      run: |
-        "IS_SNAPSHOT=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-    - name: Build APK and app bundle
-      shell: powershell
-      run: .\gradlew.bat bundlePlaystoreRelease assemblePlaystoreRelease --no-daemon
-      env:
-        RELEASE_STORE_FILE: ${{ steps.decode_keystore.outputs.filePath }}
-        RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-        RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        BUILD_NUMBER: ${{ github.run_number }}
-    - name: Upload crashlytics symbols
-      shell: powershell
-      run: .\gradlew.bat uploadCrashlyticsSymbolFilePlaystoreRelease --no-daemon
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: AppBundle
-        path: build/outputs/bundle/playstoreRelease/*
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: APK
-        path: build/outputs/apk/playstore/release/*
-    - name: Set version variables
-      shell: powershell
-      run: |
-        $ver = (Get-Content version.txt -Raw).Trim()
-        "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-    - name: Create/Update Github Snapshot Release
-      uses: softprops/action-gh-release@v2
-      if: github.ref == 'refs/heads/dev'
-      with:
-        tag_name: ${{ env.VERSION }}
-        name: ${{ env.VERSION }}
-        prerelease: true
-        body: 'Snapshot release (self-hosted GAMING)'
-        files: build/outputs/apk/release/*.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Publish Snapshot to Play Store
-      uses: swootte/upload-google-play@V1.1.5
-      if: github.ref == 'refs/heads/dev'
-      with:
-        serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-        packageName: uk.co.armedpineapple.cth
-        releaseFiles: build/outputs/bundle/release/*.aab
-        track: alpha
-        status: completed
-        whatsNewDirectory: distribution/snapshot
-        changesNotSentForReview: false
+      - name: set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Require Play Store secrets
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.KEYSTORE }}")) {
+            throw "Secret KEYSTORE is missing. Play Store signed builds need repository secrets."
+          }
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.GOOGLE_SERVICES_JSON }}")) {
+            throw "Secret GOOGLE_SERVICES_JSON is missing."
+          }
+
+      - name: Resolve Android SDK (self-hosted)
+        shell: powershell
+        run: |
+          $sdk = $env:ANDROID_HOME
+          if ([string]::IsNullOrWhiteSpace($sdk)) { $sdk = $env:ANDROID_SDK_ROOT }
+          if ([string]::IsNullOrWhiteSpace($sdk)) {
+            $candidates = @(
+              "$env:LOCALAPPDATA\Android\Sdk",
+              "$env:USERPROFILE\AppData\Local\Android\Sdk",
+              "E:\000-lastBeacon_ia\android-sdk",
+              "C:\Android\Sdk",
+              "E:\Android\Sdk"
+            )
+            foreach ($c in $candidates) {
+              if ((Test-Path "$c\platform-tools") -or (Test-Path "$c\platforms")) {
+                $sdk = $c
+                break
+              }
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($sdk) -or -not (Test-Path $sdk)) {
+            throw "Android SDK not found. Set ANDROID_HOME on the GAMING runner."
+          }
+          "ANDROID_HOME=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $escaped = ($sdk -replace '\\', '/')
+          "sdk.dir=$escaped" | Set-Content -Path local.properties -Encoding ascii
+
+      - name: Decode Keystore
+        id: decode_keystore
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: 'android_keystore.jks'
+          encodedString: ${{ secrets.KEYSTORE }}
+
+      - name: Decode Google Services Info
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: 'google-services.json'
+          fileDir: '.'
+          encodedString: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Build playstore release (short path)
+        shell: powershell
+        run: |
+          $short = "C:\cth-ps"
+          if (Test-Path $short) { Remove-Item -Recurse -Force $short }
+          New-Item -ItemType Directory -Path $short | Out-Null
+          robocopy "$env:GITHUB_WORKSPACE" $short /E /NFL /NDL /NJH /NJS /nc /ns /np
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
+          Set-Location $short
+          $sdk = $env:ANDROID_HOME
+          "sdk.dir=$($sdk -replace '\\','/')" | Set-Content -Path local.properties -Encoding ascii
+          # Keystore path from action is under GITHUB_WORKSPACE temp; copy if needed.
+          $ks = "${{ steps.decode_keystore.outputs.filePath }}"
+          .\gradlew.bat bundlePlaystoreRelease assemblePlaystoreRelease --no-daemon
+          "SHORT_WORKSPACE=$short" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          RELEASE_STORE_FILE: ${{ steps.decode_keystore.outputs.filePath }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: Stage playstore artifacts into workspace
+        shell: powershell
+        run: |
+          $short = $env:SHORT_WORKSPACE
+          $ws = $env:GITHUB_WORKSPACE
+          New-Item -ItemType Directory -Force -Path "$ws\build\outputs\apk\playstore\release" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$ws\build\outputs\bundle\playstoreRelease" | Out-Null
+          Copy-Item "$short\build\outputs\apk\playstore\release\*" "$ws\build\outputs\apk\playstore\release\" -Force -ErrorAction Stop
+          Copy-Item "$short\build\outputs\bundle\playstoreRelease\*" "$ws\build\outputs\bundle\playstoreRelease\" -Force -ErrorAction SilentlyContinue
+
+      - name: Upload crashlytics symbols
+        shell: powershell
+        run: |
+          Set-Location $env:SHORT_WORKSPACE
+          .\gradlew.bat uploadCrashlyticsSymbolFilePlaystoreRelease --no-daemon
+        env:
+          RELEASE_STORE_FILE: ${{ steps.decode_keystore.outputs.filePath }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppBundle
+          path: build/outputs/bundle/playstoreRelease/*
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: APK
+          path: build/outputs/apk/playstore/release/*

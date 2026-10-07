@@ -108,20 +108,31 @@ jobs:
           # Set in "Resolve version" (1000000 + run_number) above SNAPSHOT default.
           BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
 
-      - name: Stage APK artifact
+      - name: Stage APK into GitHub workspace
         shell: powershell
         run: |
-          $root = if ($env:SHORT_WORKSPACE) { $env:SHORT_WORKSPACE } else { $env:GITHUB_WORKSPACE }
-          Set-Location $root
-          New-Item -ItemType Directory -Force -Path distribution/pre-release | Out-Null
-          $src = Get-ChildItem -Recurse build/outputs/apk/community/release/*.apk | Select-Object -First 1
+          # Build runs under C:\cth-pr; Actions upload/release need GITHUB_WORKSPACE.
+          $short = $env:SHORT_WORKSPACE
+          if ([string]::IsNullOrWhiteSpace($short)) { $short = $env:GITHUB_WORKSPACE }
+          $src = Get-ChildItem -Recurse "$short\build\outputs\apk\community\release\*.apk" |
+            Select-Object -First 1
           if (-not $src) {
-            $src = Get-ChildItem -Recurse build/outputs/apk/**/release/*.apk | Select-Object -First 1
+            $src = Get-ChildItem -Recurse "$short\build\outputs\apk\**\release\*.apk" |
+              Select-Object -First 1
           }
-          if (-not $src) { throw "No release APK found" }
-          $dest = "distribution/pre-release/CorsixTH-Android-$($env:BUILD_VERSION).apk"
+          if (-not $src) { throw "No release APK found under $short" }
+
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "distribution\pre-release"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $dest = Join-Path $outDir "CorsixTH-Android-$($env:BUILD_VERSION).apk"
           Copy-Item $src.FullName $dest -Force
-          Write-Host "Staged $dest ($($src.Length) bytes)"
+
+          $notesSrc = Join-Path $env:GITHUB_WORKSPACE "distribution\pre-release\0.70.1-pre-release.md"
+          if (-not (Test-Path $notesSrc)) {
+            $notesAlt = Join-Path $short "distribution\pre-release\0.70.1-pre-release.md"
+            if (Test-Path $notesAlt) { Copy-Item $notesAlt $notesSrc -Force }
+          }
+          Write-Host "Staged $dest ($($src.Length) bytes) into GITHUB_WORKSPACE"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -130,6 +141,7 @@ jobs:
           path: |
             distribution/pre-release/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/pre-release/0.70.1-pre-release.md
+          if-no-files-found: error
 
       - name: Publish / update GitHub pre-release
         uses: softprops/action-gh-release@v2
@@ -142,6 +154,7 @@ jobs:
           files: |
             distribution/pre-release/CorsixTH-Android-${{ env.BUILD_VERSION }}.apk
             distribution/pre-release/0.70.1-pre-release.md
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
