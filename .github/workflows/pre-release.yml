@@ -5,12 +5,13 @@ on:
   push:
     tags:
       - 'v*-pre-release'
+      - 'v*-pre-release-*'
   workflow_dispatch:
     inputs:
       build_version:
-        description: 'BUILD_VERSION / release name (e.g. 0.70.1-pre-release)'
+        description: 'BUILD_VERSION / release name (e.g. 0.70.1-pre-release-2)'
         required: true
-        default: '0.70.1-pre-release'
+        default: '0.70.1-pre-release-2'
 
 permissions:
   contents: write
@@ -71,9 +72,12 @@ jobs:
             $tag = "${{ github.ref_name }}"
             if ($tag.StartsWith("v")) { $ver = $tag.Substring(1) } else { $ver = $tag }
           }
+          $runNumber = [int]"${{ github.run_number }}"
+          $buildNumber = 1000000 + $runNumber
           "BUILD_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=v$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "BUILD_VERSION=$ver"
+          "BUILD_NUMBER=$buildNumber" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "BUILD_VERSION=$ver BUILD_NUMBER=$buildNumber"
 
       - name: Build release APK (short path)
         shell: powershell
@@ -95,8 +99,8 @@ jobs:
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
           IS_SNAPSHOT: 'false'
-          # Stay above local SNAPSHOT default (999999) so devices can upgrade.
-          BUILD_NUMBER: ${{ 1000000 + github.run_number }}
+          # Set in "Resolve version" (1000000 + run_number) above SNAPSHOT default.
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
 
       - name: Stage APK artifact
         shell: powershell
