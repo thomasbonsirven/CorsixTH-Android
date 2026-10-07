@@ -95,7 +95,8 @@ jobs:
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
           IS_SNAPSHOT: 'false'
-          BUILD_NUMBER: ${{ github.run_number }}
+          # Stay above local SNAPSHOT default (999999) so devices can upgrade.
+          BUILD_NUMBER: ${{ 1000000 + github.run_number }}
 
       - name: Stage APK artifact
         shell: powershell
