@@ -45,17 +45,13 @@ jobs:
       - name: Build release APK
         shell: powershell
         run: |
-          # Community/local signing: omit RELEASE_STORE_* to use debug keystore.
-          # Set KEYSTORE + RELEASE_* secrets on the repo for a real release signature.
+          # Uses debug keystore when RELEASE_STORE_FILE is unset/blank.
           .\gradlew.bat createGameZip assembleRelease --no-daemon
         env:
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
           IS_SNAPSHOT: 'false'
           BUILD_NUMBER: ${{ github.run_number }}
-          RELEASE_STORE_FILE: ${{ secrets.RELEASE_STORE_FILE }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
 
       - name: Stage APK artifact
         shell: powershell
