@@ -1,12 +1,15 @@
-# Community APK on every push to dev (self-hosted GAMING).
+# Community APK on the modernization branch (self-hosted GAMING).
 name: Android CI
 
 on:
   push:
     branches:
+      - 'feature/corsixth-0.70-modernization'
       - 'dev'
   pull_request:
-    branches: ['dev']
+    branches:
+      - 'feature/corsixth-0.70-modernization'
+      - 'dev'
   workflow_dispatch:
 
 permissions:
@@ -114,15 +117,20 @@ jobs:
           if-no-files-found: error
 
       - name: Publish rolling community pre-release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        if: >
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/feature/corsixth-0.70-modernization' ||
+           github.ref == 'refs/heads/dev')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: community-latest
-          name: Community latest (dev)
+          name: Community latest (modernization)
           prerelease: true
           generate_release_notes: false
           body: |
-            Automatic community APK from `dev` (self-hosted GAMING).
+            Automatic community APK from `${{ github.ref_name }}` (self-hosted GAMING).
+
+            Primary branch: `feature/corsixth-0.70-modernization`
 
             **Version:** ${{ env.BUILD_VERSION }}
             **Not fully tested** — early tester build.
